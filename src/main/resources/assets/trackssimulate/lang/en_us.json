@@ -1,0 +1,7 @@
+{
+  "itemGroup.trackssimulate": "Tracks Simulate · Prototype",
+  "block.trackssimulate.drive_wheel": "Drive Wheel",
+  "block.trackssimulate.road_wheel": "Road Wheel",
+  "block.trackssimulate.return_wheel": "Return Roller",
+  "item.trackssimulate.track_debug_stick": "Track Debug Stick"
+}

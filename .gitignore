@@ -1,0 +1,13 @@
+.gradle/
+.gradle-user-home/
+build/
+libs/
+test-environment/
+run/
+.idea/
+*.iml
+scripts/__pycache__/
+local.properties
+compatibility/*.jar
+dist/
+参考模组/

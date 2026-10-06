@@ -1,0 +1,629 @@
+{
+  "minecraft": "1.21.1",
+  "neoforge": "21.1.248",
+  "source": "D:\\.minecraft\\versions\\克莱星2.0L",
+  "mods": {
+    "create": {
+      "file": "create-6.0.10.jar",
+      "version": "6.0.10",
+      "sha256": "ef87fe5709f1ba1f5b8bb20a2925b5afb4669e178fd6d8bf10c167759eefe37a",
+      "source": "D:\\.minecraft\\versions\\克莱星2.0L\\mods\\[机械动力] create-1.21.1-6.0.10.jar",
+      "nested": null,
+      "dependencies": {
+        "create": [
+          {
+            "modId": "neoforge",
+            "type": "required",
+            "versionRange": "[21.1.219,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "minecraft",
+            "type": "required",
+            "versionRange": "[1.21.1]",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "flywheel",
+            "type": "required",
+            "versionRange": "[1.0.0,2.0)",
+            "ordering": "AFTER",
+            "side": "CLIENT"
+          },
+          {
+            "modId": "ponder",
+            "type": "required",
+            "versionRange": "[1.0.82,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "sodium",
+            "type": "optional",
+            "reason": "Versions before 0.6.9 do not include the neccesary APIs Create needs to work properly with Sodium.",
+            "versionRange": "[0.6.9,)",
+            "ordering": "NONE",
+            "side": "CLIENT"
+          },
+          {
+            "modId": "lithium",
+            "type": "optional",
+            "reason": "Versions before 0.14.7 crash when paired with Create, Update Lithium.",
+            "versionRange": "[0.14.7,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "journeymap",
+            "type": "optional",
+            "reason": "Versions before 1.21.1-6.0.0-beta.46 do not contain the APIs Create requires to work with JourneyMap.",
+            "versionRange": "[1.21.1-6.0.0-beta.46,)",
+            "ordering": "NONE",
+            "side": "CLIENT"
+          },
+          {
+            "modId": "xaeroworldmap",
+            "type": "optional",
+            "reason": "Versions before 1.40.2 do not contain the classes Create requires to work with Xaero's World Map.",
+            "versionRange": "[1.40.2,)",
+            "ordering": "NONE",
+            "side": "CLIENT"
+          },
+          {
+            "modId": "radium",
+            "type": "incompatible",
+            "reason": "Radium is a unofficial port of Lithium, Lithium is now natively available for NeoForge and does not suffer from the same issues radium does, use Lithium instead.",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "palladium",
+            "type": "incompatible",
+            "reason": "Palladium does not improve memory usage by anything meaningful, and results in broken visuals for Create's blocks with connected textures.",
+            "ordering": "NONE",
+            "side": "BOTH"
+          }
+        ]
+      },
+      "license": "Read attached LICENSE.md"
+    },
+    "sable": {
+      "file": "sable-2.0.5.jar",
+      "version": "2.0.5",
+      "sha256": "18265f36630b6213ab97426a3d90a5b6db4be7761ff67c894ab7cc982c194ba7",
+      "source": "D:\\.minecraft\\versions\\克莱星2.0L\\mods\\sable-neoforge-1.21.1-2.0.5.jar",
+      "nested": null,
+      "dependencies": {
+        "sable": [
+          {
+            "modId": "neoforge",
+            "type": "required",
+            "versionRange": "[21.1.228,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "minecraft",
+            "type": "required",
+            "versionRange": "[1.21.1]",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "flywheel",
+            "type": "optional",
+            "versionRange": "[1.0.6,)",
+            "ordering": "AFTER",
+            "side": "CLIENT"
+          },
+          {
+            "modId": "create",
+            "type": "optional",
+            "versionRange": "[6.0.10,6.1.0)",
+            "ordering": "AFTER",
+            "side": "CLIENT"
+          },
+          {
+            "modId": "sablecompanion",
+            "type": "incompatible",
+            "versionRange": "(1.6.0,)",
+            "reason": "Sable is out of date"
+          },
+          {
+            "modId": "sodium",
+            "type": "incompatible",
+            "versionRange": "(,0.8.12-alpha.2+mc1.21.1)",
+            "reason": "Sable supports Sodium 0.8.12-alpha.2+mc1.21.1 and above"
+          },
+          {
+            "modId": "scalablelux",
+            "type": "incompatible"
+          }
+        ]
+      },
+      "license": "PolyForm Shield License 1.0.0"
+    },
+    "synaxis": {
+      "file": "synaxis-1.5.1.jar",
+      "version": "1.5.1",
+      "sha256": "7a0999359a99ca463eea736776ace877f7eee1971c13def84a548d07071c4e2a",
+      "source": "D:\\.minecraft\\versions\\克莱星2.0L\\mods\\synaxis-1.5.1.jar",
+      "nested": null,
+      "dependencies": {
+        "synaxis": [
+          {
+            "modId": "neoforge",
+            "type": "required",
+            "versionRange": "[21.1.228,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "minecraft",
+            "type": "required",
+            "versionRange": "[1.21.1]",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "create",
+            "type": "required",
+            "versionRange": "[6.0.10,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "flywheel",
+            "type": "required",
+            "versionRange": "[1.0.6,)",
+            "ordering": "NONE",
+            "side": "CLIENT"
+          },
+          {
+            "modId": "sable",
+            "type": "required",
+            "versionRange": "[2.0.0,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "sable_schematic_api",
+            "type": "required",
+            "versionRange": "[0.4.1,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "ldlib2",
+            "type": "required",
+            "versionRange": "[2.2.17,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "create_tweaked_controllers",
+            "type": "optional",
+            "versionRange": "[1.2.7,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "firecontrolcompat",
+            "type": "incompatible",
+            "versionRange": "[0.0,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          }
+        ]
+      },
+      "license": "All Rights Reserved"
+    },
+    "sable_schematic_api": {
+      "file": "sable_schematic_api-1.0.1.jar",
+      "version": "1.0.1",
+      "sha256": "1d0805f537f27ce3160488331755497417514a3dfb30d5ca3fdca1b000e7e920",
+      "source": "D:\\.minecraft\\versions\\克莱星2.0L\\mods\\sable-photomancy-1.0.1.jar",
+      "nested": null,
+      "dependencies": {
+        "sable_schematic_api": [
+          {
+            "modId": "neoforge",
+            "type": "required",
+            "versionRange": "[21.1.228,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "minecraft",
+            "type": "required",
+            "versionRange": "[1.21.1]",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "sable",
+            "type": "required",
+            "reason": "Blueprint export and placement operate on Sable sub-levels.",
+            "versionRange": "[1.1.3,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "ldlib2",
+            "type": "required",
+            "reason": "The external blueprint tool item uses LDLib2 for its in-game UI.",
+            "versionRange": "[2.2.17,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "create",
+            "type": "optional",
+            "reason": "Create is a compatibility target for blueprint mapper experiments.",
+            "versionRange": "[6.0.8,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "simulated",
+            "type": "optional",
+            "reason": "Simulated Project is a compatibility target for blueprint mapper experiments.",
+            "versionRange": "[1.0.0,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "copycats",
+            "type": "optional",
+            "reason": "Create: Copycats+ is a compatibility target for blueprint mapper experiments.",
+            "versionRange": "[3.0.4,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "drivebywire",
+            "type": "optional",
+            "reason": "Drive By Wire is a compatibility target for blueprint mapper experiments.",
+            "versionRange": "[0.2.4,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          }
+        ]
+      },
+      "license": "MIT"
+    },
+    "ldlib2": {
+      "file": "ldlib2-2.2.33.jar",
+      "version": "2.2.33",
+      "sha256": "3fc17e118e58727099a39748f82ae6f3a23a77613d5c6722fd88964916c06aa9",
+      "source": "D:\\.minecraft\\versions\\克莱星2.0L\\mods\\ldlib2-neoforge-1.21.1-2.2.33-all.jar",
+      "nested": null,
+      "dependencies": {
+        "ldlib2": [
+          {
+            "modId": "neoforge",
+            "type": "required",
+            "versionRange": "[21.1.216,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "jei",
+            "type": "optional",
+            "versionRange": "[19.39.0.368,)",
+            "ordering": "NONE",
+            "side": "CLIENT"
+          }
+        ]
+      },
+      "license": "LGPL-3.0 license"
+    },
+    "simulated": {
+      "file": "simulated-1.3.0.jar",
+      "version": "1.3.0",
+      "sha256": "9cbfdaf421b450727232d7a2de5f9e2ab826ac2113a25fb1286ba431a1a8a403",
+      "source": "D:\\.minecraft\\versions\\克莱星2.0L\\mods\\[机械动力：航空学] create-aeronautics-bundled-1.21.1-1.3.0.jar",
+      "nested": "META-INF/jarjar/dev.simulated_team.simulated.simulated-neoforge-1.21.1-1.3.0.jar",
+      "dependencies": {
+        "simulated": [
+          {
+            "modId": "neoforge",
+            "type": "required",
+            "versionRange": "[21.1.228,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "minecraft",
+            "type": "required",
+            "versionRange": "[1.21.1]",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "create",
+            "type": "required",
+            "versionRange": "[6.0.10,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "flywheel",
+            "type": "required",
+            "versionRange": "[1.0.6,)",
+            "ordering": "NONE",
+            "side": "CLIENT"
+          },
+          {
+            "modId": "sable",
+            "type": "required",
+            "versionRange": "[2.0.0,3.0.0)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          }
+        ]
+      },
+      "license": "Read attached LICENSE.md"
+    },
+    "offroad": {
+      "file": "offroad-1.3.0.jar",
+      "version": "1.3.0",
+      "sha256": "f87a27bd830f14be7fa801358084d00335b64cd31785ad6294ea5970b1124061",
+      "source": "D:\\.minecraft\\versions\\克莱星2.0L\\mods\\[机械动力：航空学] create-aeronautics-bundled-1.21.1-1.3.0.jar",
+      "nested": "META-INF/jarjar/dev.ryanhcode.offroad.offroad-neoforge-1.21.1-1.3.0.jar",
+      "dependencies": {
+        "offroad": [
+          {
+            "modId": "neoforge",
+            "type": "required",
+            "versionRange": "[21.1.228,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "minecraft",
+            "type": "required",
+            "versionRange": "[1.21.1]",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "create",
+            "type": "required",
+            "versionRange": "[6.0.10,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "sable",
+            "type": "required",
+            "versionRange": "[2.0.0,3.0.0)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "simulated",
+            "type": "required",
+            "versionRange": "[1.3.0,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          }
+        ]
+      },
+      "license": "Read attached LICENSE.md"
+    },
+    "gearwork": {
+      "file": "gearwork-1.0.0.jar",
+      "version": "1.0.0",
+      "sha256": "7b738e557d11d63cb7b7a9732037708a392e9e736bb684e0b3cd106e0231c8b5",
+      "source": "D:\\CreateAdd\\TracksSimulate\\参考模组\\gearwork-1.0.0.jar",
+      "nested": null,
+      "dependencies": {
+        "gearwork": [
+          {
+            "modId": "neoforge",
+            "type": "required",
+            "versionRange": "[21.1.228,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "minecraft",
+            "type": "required",
+            "versionRange": "[1.21.1]",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "synaxis",
+            "type": "required",
+            "versionRange": "[1.4.3,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "create",
+            "type": "required",
+            "versionRange": "[6.0.10,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "sable",
+            "type": "required",
+            "versionRange": "[2.0.3,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "sable_schematic_api",
+            "type": "required",
+            "versionRange": "[0.4.0,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "ldlib2",
+            "type": "required",
+            "versionRange": "[2.2.17,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          }
+        ]
+      },
+      "license": "All Rights Reserved"
+    },
+    "tracks": {
+      "file": "tracks-1.0.1.jar",
+      "version": "1.0.1",
+      "sha256": "b126b2522a129c13ebec6491b8602726bad9a3df201cf906468ba583796125c8",
+      "source": "D:\\CreateAdd\\TracksSimulate\\参考模组\\tracks-neoforge-1.21.1-1.0.1.jar",
+      "nested": null,
+      "dependencies": {
+        "tracks": [
+          {
+            "modId": "neoforge",
+            "type": "required",
+            "versionRange": "[21.1.219,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "minecraft",
+            "type": "required",
+            "versionRange": "[1.21.1]",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "create",
+            "type": "required",
+            "versionRange": "[6.0.9,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "sable",
+            "type": "required",
+            "versionRange": "[1.0.3,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "simulated",
+            "type": "required",
+            "versionRange": "[1.0.1,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          },
+          {
+            "modId": "offroad",
+            "type": "required",
+            "versionRange": "[1.0.1,)",
+            "ordering": "AFTER",
+            "side": "BOTH"
+          }
+        ]
+      },
+      "license": "Read attached LICENSE.md"
+    },
+    "sable_2_0_0": {
+      "file": "sable-2.0.0.jar",
+      "version": "2.0.0",
+      "sha256": "0eff61c2f6eda6386f63fb14bc38e930687c0f30e36d10fd360f2bec5f02f687",
+      "source": "D:\\CreateAdd\\TracksSimulate\\compatibility\\sable-2.0.0.jar",
+      "nested": null,
+      "dependencies": {
+        "sable": [
+          {
+            "modId": "neoforge",
+            "type": "required",
+            "versionRange": "[21.1.228,)",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "minecraft",
+            "type": "required",
+            "versionRange": "[1.21.1]",
+            "ordering": "NONE",
+            "side": "BOTH"
+          },
+          {
+            "modId": "flywheel",
+            "type": "optional",
+            "versionRange": "[1.0.6,)",
+            "ordering": "AFTER",
+            "side": "CLIENT"
+          },
+          {
+            "modId": "create",
+            "type": "optional",
+            "versionRange": "[6.0.10,6.1.0)",
+            "ordering": "AFTER",
+            "side": "CLIENT"
+          },
+          {
+            "modId": "sablecompanion",
+            "type": "incompatible",
+            "versionRange": "(1.6.0,)",
+            "reason": "Sable is out of date"
+          },
+          {
+            "modId": "sodium",
+            "type": "incompatible",
+            "versionRange": "(,0.8.12-alpha.2+mc1.21.1)",
+            "reason": "Sable supports Sodium 0.8.12-alpha.2+mc1.21.1 and above"
+          },
+          {
+            "modId": "scalablelux",
+            "type": "incompatible"
+          },
+          {
+            "modId": "littletiles",
+            "type": "incompatible"
+          }
+        ]
+      },
+      "license": "PolyForm Shield License 1.0.0"
+    }
+  },
+  "profiles": {
+    "base": [
+      "create",
+      "sable"
+    ],
+    "gearwork": [
+      "create",
+      "sable",
+      "synaxis",
+      "sable_schematic_api",
+      "ldlib2",
+      "gearwork"
+    ],
+    "tracks": [
+      "create",
+      "sable",
+      "simulated",
+      "offroad",
+      "tracks"
+    ],
+    "combined": [
+      "create",
+      "sable",
+      "synaxis",
+      "sable_schematic_api",
+      "ldlib2",
+      "simulated",
+      "offroad",
+      "gearwork",
+      "tracks"
+    ],
+    "base-2.0.0": [
+      "create",
+      "sable_2_0_0"
+    ]
+  }
+}

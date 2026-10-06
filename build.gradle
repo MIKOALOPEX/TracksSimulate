@@ -1,0 +1,114 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = mod_version
+group = 'dev.trackssimulate'
+base { archivesName = mod_id }
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+def testProfile = providers.gradleProperty('testProfile').getOrElse('base')
+if (!(testProfile in ['base', 'base-2.0.0', 'gearwork', 'tracks', 'combined'])) {
+    throw new GradleException("Unknown testProfile: ${testProfile}")
+}
+
+neoForge {
+    version = project.neo_version
+    runs {
+        client {
+            client()
+            gameDirectory = project.file("test-environment/${testProfile}")
+            programArguments.addAll '--username', 'TrackTester', '--width', '1280', '--height', '720'
+            jvmArgument '-Xmx4G'
+        }
+        configureEach { logLevel = org.slf4j.event.Level.INFO }
+    }
+    mods {
+        trackssimulate { sourceSet sourceSets.main }
+    }
+}
+
+dependencies {
+    // Runtime jars live exclusively in each profile's mods folder (avoid loading twice).
+    compileOnly files('libs/create-6.0.10.jar', 'libs/sable-2.0.0.jar')
+    compileOnly files(fileTree(dir: layout.buildDirectory.dir('compile-support'), include: ['*.jar'])).builtBy('prepareCompileSupport')
+}
+
+tasks.register('prepareCompileSupport', Sync) {
+    from(zipTree('libs/create-6.0.10.jar')) { include 'META-INF/jarjar/*.jar' }
+    from(zipTree('libs/sable-2.0.0.jar')) { include 'META-INF/jarjar/*companion*.jar' }
+    eachFile { path = name }
+    includeEmptyDirs = false
+    into layout.buildDirectory.dir('compile-support')
+}
+
+tasks.named('processResources', ProcessResources) {
+    def values = [mod_version: project.mod_version,
+                  sable_version_range: project.sable_version_range,
+                  create_version_range: project.create_version_range]
+    inputs.properties values
+    filesMatching('META-INF/neoforge.mods.toml') { expand values }
+}
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+sourceSets {
+    geometryChecks {
+        java.srcDir 'src/geometryChecks/java'
+        compileClasspath = sourceSets.main.output
+        runtimeClasspath = output + compileClasspath
+    }
+}
+tasks.register('geometryTest', JavaExec) {
+    dependsOn geometryChecksClasses
+    classpath = sourceSets.geometryChecks.runtimeClasspath
+    mainClass = 'dev.trackssimulate.track.TrackPathTest'
+    maxHeapSize = '128m'
+}
+tasks.register('suspensionTest', JavaExec) {
+    dependsOn geometryChecksClasses
+    classpath = sourceSets.geometryChecks.runtimeClasspath
+    mainClass = 'dev.trackssimulate.physics.SuspensionSettingsTest'
+    maxHeapSize = '128m'
+}
+tasks.register('wheelGeometryTest', JavaExec) {
+    dependsOn geometryChecksClasses
+    classpath = sourceSets.geometryChecks.runtimeClasspath
+    mainClass = 'dev.trackssimulate.wheel.WheelGeometryTest'
+    maxHeapSize = '128m'
+}
+tasks.register('contactPhysicsTest', JavaExec) {
+    dependsOn geometryChecksClasses
+    classpath = sourceSets.geometryChecks.runtimeClasspath
+    mainClass = 'dev.trackssimulate.physics.ContactPhysicsTest'
+    maxHeapSize = '128m'
+}
+tasks.register('trackSupportTest', JavaExec) {
+    dependsOn geometryChecksClasses
+    classpath = sourceSets.geometryChecks.runtimeClasspath
+    mainClass = 'dev.trackssimulate.track.TrackSupportTest'
+    maxHeapSize = '128m'
+}
+tasks.named('check') { dependsOn 'geometryTest', 'suspensionTest', 'wheelGeometryTest', 'contactPhysicsTest', 'trackSupportTest' }
+tasks.register('beltStabilityTest', JavaExec) {
+    dependsOn geometryChecksClasses
+    classpath = sourceSets.geometryChecks.runtimeClasspath
+    mainClass = 'dev.trackssimulate.physics.BeltStabilityTest'
+    maxHeapSize = '128m'
+}
+tasks.named('check') { dependsOn 'beltStabilityTest' }
+tasks.register('voxelContactTest', JavaExec) {
+    dependsOn geometryChecksClasses
+    classpath = sourceSets.geometryChecks.runtimeClasspath
+    mainClass = 'dev.trackssimulate.physics.VoxelContactTest'
+    maxHeapSize = '128m'
+}
+tasks.named('check') { dependsOn 'voxelContactTest' }
+
+tasks.register('beltSurfaceNormalTest', JavaExec) {
+    dependsOn geometryChecksClasses
+    classpath = sourceSets.geometryChecks.runtimeClasspath
+    mainClass = 'dev.trackssimulate.track.BeltSurfaceNormalTest'
+    maxHeapSize = '128m'
+}
+tasks.named('check') { dependsOn 'beltSurfaceNormalTest' }

@@ -1,0 +1,115 @@
+# Tracks Simulate 基础项目
+
+Minecraft **1.21.1** / Java **21** / NeoForge **21.1.248**。当前为 **0.5.11-prototype 驾驶与带面承载原型**：履带直段和绕轮弧段提供接触冲量，支持受摩擦限制的动力推进、无导轮自由滚动、制动及悬挂载荷传递。保留负重轮缩放、偏移、隐藏、弹簧和行程端限位。采用连续带的简化接触模型，张力守恒、松弛、脱轨、炮击断履尚未实现。
+
+后续性能架构见 [Gearwork 对齐与 ARR 边界规划](docs/GEARWORK_ALIGNMENT_PLAN.md)：只对齐通用方法和功能目标，独立实现；当前尚未实施。
+
+0.5.11 将长度相关限制扩大为两倍：整环总长 128→256 格、相邻轮距离 32→64 格、距首轮选点范围 64→128 格；渲染点数和物理带段容量同步扩大两倍，轮数仍为 32。未改变碰撞采样精度或实施性能优化。
+
+0.5.10 新增整环驱动倍率（默认 1，范围 0–16），在调试棒 → 履带 → 动力/惯量配置。放大输入 RPM 对应的目标带速，仍受动力限速、驱动力与抓地限制；旧存档默认 1。性能本轮仅分析，未实施优化，见 [驱动倍率与性能分析](docs/DRIVE_AND_PERFORMANCE_0510.md)。
+
+0.5.9 将调试操作集中到调试棒 GUI，恢复 Create 扳手潜行拆轮，补齐失效履带掉落与手动返还，修正连接顺序引起的法线翻转。
+
+0.5.8 修正三角形等布局中外侧导轮被短路径反包覆到环外的问题，加载旧连接时同步校正；直接替换用户更新的 belt 贴图。详见 [三角形绕带修复](docs/TRIANGLE_ROUTE_FIX_058.md)。
+
+0.5.7 接入用户更新的轮子模型、履带和轮胎贴图，增加 Copycat 材料填充、方向调整、取回及存档同步。操作与范围见 [轮组材质说明](docs/WHEEL_MATERIALS_057.md)。
+
+0.5.6 移除履带安装点重复参与 Sable 碰撞的问题；开放接触扩张、预测、侧面抓地、接触柔度和蓝色判定框；多环按整车分配带惯量及驱动力预算。针对中途测试的低质量双流转向停转，增加侧滑过渡速度并调整默认动力预算。参数、旧存档使用方法、物理日志和本阶段游戏验收矩阵见 [完整测试说明](docs/CONTACT_AND_STEERING_056.md)。这些改动已经过计算检查，游戏场景仍需用户验收。
+
+0.5.5 根据用户实测日志修复完整方块接缝产生斜向假墙法向的问题，增加质量/质心变化、接触对象及惯量日志。非固定重物装载仍需用户复测，详见 [接缝修正与载荷日志](docs/VOXEL_SEAM_FIX_055.md)。
+
+0.5.4 修正接触求解中的额外能量注入，连接履带的悬挂改为统一求解的内部伸缩坐标，同车多环共享车体速度，增加独立横向摩擦与运行日志。游戏内弹跳、抓取、爬坡及侧碰效果仍待用户复测；详见 [物理修正与日志说明](docs/PHYSICS_STABILITY_054.md)。
+
+0.5.3 支持三种轮子直接放置；潜行扳手统一编辑尺寸，轮宽倍率自动同步整环，轮径倍率可选同步全部轮种。履带页提供摩擦 0–10、带宽和厚度调整。操作与验证见 [本轮修改](docs/WHEEL_AND_BELT_UPDATE.md)。
+
+0.5.2 将负重轮成员与实际接触分离：抬高/缩小的中间负重轮不会把下部带面拉到上方，落回带面后再承载。旧连接重新进入世界即可应用；上绕/侧绕节点继续使用导轮或托带轮。详情见 [修复与验证](docs/PHYSICS_MILESTONE.md)。
+
+每次增删选点重新规划，优先消除带面交叉；保留独立轮包覆方向、允许轮体重叠、Create 黄色选点框、红绿绕带预览和临时选点会话；换手、换栏位或打开界面等操作取消未完成的选择。
+
+手持**履带调试棒**右键轮子原安装点，统一打开悬挂、尺寸/偏移、显示/轴、履带物理/判定框和状态界面。Create 扳手普通右键取回填充材质，潜行右键拆除轮子；手持 Create 传送带潜行右键拆带并返还 1 条（选点中则撤销末点）。详见 [调试棒、返还与明暗修正](docs/DEBUG_AND_REFUNDS_059.md)。装配为 Sable 车体后才启用真实承载与驱动。
+
+## 快速使用
+
+日常测试直接双击 `D:\CreateAdd\Start_TracksSimulate_Client.bat`。脚本先读取当前系统代理，联网准备依赖并编译最新修改；准备失败时自动使用 `--offline` 和本地缓存重试。准备成功后以 Gradle 离线模式启动 `combined` 联合测试环境（新项目 + Gearwork + Tracks 及必要依赖）。离线重试不读取代理配置；若缓存不完整或代码编译失败，会保留错误并停止，不会运行旧构建。游戏启动后退出或崩溃不会触发再次启动。
+
+这里的“最新”指本项目最新源码；Minecraft、加载器与模组依赖保持锁定版本，不会在每次启动时自动升级。首次缺失的依赖和游戏资源仍需联网准备。关闭游戏后控制台保留退出信息；存档和日志位于 `test-environment/combined/`。后续修改完成后由用户自行启动，助手不主动打开测试客户端。
+
+在本目录打开 PowerShell：
+
+```powershell
+# 编译并运行无需 Minecraft 的几何/接触检查；产物位于 build/libs/trackssimulate-0.5.11-prototype.jar
+.\scripts\gradle.ps1 build
+
+# 新项目最小环境：Create + Sable 2.0.5 + 当前项目源码
+.\scripts\gradle.ps1 runClient -PtestProfile=base
+
+# 两个参考模组及完整最小依赖集合
+.\scripts\gradle.ps1 runClient -PtestProfile=combined
+
+# 单独参考对照（各自保存世界、配置、日志）
+.\scripts\gradle.ps1 runClient -PtestProfile=gearwork
+.\scripts\gradle.ps1 runClient -PtestProfile=tracks
+
+# 最低 Sable 版本的基础环境
+.\scripts\gradle.ps1 runClient '-PtestProfile=base-2.0.0'
+
+# 检查依赖闭包、重复模组和 SHA-256
+python scripts/audit_environment.py
+
+# 编译后生成本地测试压缩包
+python scripts/package_testpacks.py
+```
+
+每个环境位于 `test-environment/<配置名>/`。运行时自动加载本项目源码，**不要再把构建产物放入这些环境的 mods 文件夹**，否则会重复加载。原始 `D:\.minecraft\versions\克莱星2.0L` 和原存档不参与测试写入。
+
+`scripts/check_native_suspension.py` 是早期原生悬挂夹具，不能验证当前整车多履带求解器，不作为本阶段验收测试。
+
+脚本每次从 Windows 当前用户 Internet Settings 读取启用的代理，并通过本次命令行覆盖全局 Gradle 的旧代理。未启用系统代理时清空 HTTP/HTTPS 代理主机。支持单一代理和 `http=...;https=...` 格式；不自动解析 PAC。Java 从 JAVA_HOME / PATH 获取，当前机器已有 Java 21。
+
+## 重建本地依赖
+
+`dist/` 保留此前基础工程的 base 和 combined ZIP，本轮未重新生成，不能把旧 ZIP 当作当前轮组原型。需要时运行下面的打包脚本生成对应版本包。日常直接用测试 BAT 即可，Gradle 环境加载当前项目源码，无需导入 JAR。原测试环境验证范围与已知资源问题见 `docs/VALIDATION.md`。
+
+```powershell
+python scripts/fetch_baseline.py
+python scripts/prepare_environment.py --source 'D:\.minecraft\versions\克莱星2.0L'
+python scripts/audit_environment.py
+```
+
+`fetch_baseline.py` 下载官方 Sable 2.0.0 NeoForge 发布包并验证 SHA-512；其它依赖直接来自用户提供的整合包。`prepare_environment.py` 只复制指定版本，并从航空学 bundle 中提取 Simulated / Offroad 原始内嵌 JAR，不修改其内容。重复执行不会删除测试世界和用户添加的文件；新增或残留 JAR 会由审计脚本报告。
+
+`dependency-lock.json` 记录具体版本、来源、内嵌路径和 SHA-256；`docs/dependency-audit.json` 记录各配置审计结果。二进制依赖仅用于本机开发测试，不包含在新模组产物里。参考模组的代码和资源没有复制到新项目。
+
+## 版本范围
+
+| 组件 | 新项目/参考环境约束 | 本机锁定版本 |
+| --- | --- | --- |
+| Minecraft | `[1.21.1]` | 1.21.1 |
+| NeoForge | `[21.1.228,)` | 21.1.248 |
+| Sable（新项目） | `[2.0.0,)` | 编译 2.0.0；常规运行 2.0.5 |
+| Create | `[6.0.10,6.1.0)` | 6.0.10 |
+| Flywheel | `[1.0.6,2.0)` | Create 内置 1.0.6 |
+| Ponder | `[1.0.82,)` | Create 内置 1.0.82+mc1.21.1 |
+| Gearwork | 原包要求 Sable `[2.0.3,)` | 1.0.0 |
+| Synaxis（Gearwork 环境） | Gearwork 要求 `[1.4.3,)`；所选 1.5.1 要求 Sable `[2.0.0,)` | 1.5.1 |
+| Photomancy / sable_schematic_api | Gearwork 与 Synaxis 交集 `[0.4.1,)` | 1.0.1 |
+| LDLib2 | `[2.2.17,)` | 2.2.33 |
+| Tracks | 要求 Simulated / Offroad `[1.0.1,)` | 1.0.1 |
+| Simulated / Offroad | 所选 1.3.0 要求 Sable `[2.0.0,3.0.0)`；Offroad 要求 Simulated `[1.3.0,)` | 各 1.3.0 |
+
+上表中的范围来自对应 JAR 的 `META-INF/neoforge.mods.toml`，不是所有版本组合均已测试的承诺。联合参考环境实际 Sable 约束交集为 **`[2.0.3,3.0.0)`**；不能把原版 Gearwork 放入 2.0.0 环境。新项目按需求开放为 `2.0.0+`，将来使用具体物理 API 后需继续验证各版本兼容性。
+
+## 目录与后续开发
+
+- `src/main/java/dev/trackssimulate/TracksSimulate.java`：独立模组入口，ID `trackssimulate`。
+- `src/main/resources/`：模组元数据和资源包声明；最终资源将放在 `assets/trackssimulate/` 下。
+- `assets/`、`参考模组/`：用户提供的输入，保留原样。
+- `libs/`：本地编译/测试依赖，Git 忽略。
+- `test-environment/`：隔离运行目录，Git 忽略。
+- `docs/`：依赖审计与验证说明。
+
+完整目标见 [独立轮组与履带规划](docs/INDEPENDENT_TRACKS_PLAN.md)。装配、显示、带面接触、动力与悬挂限位已进入原型；张力/损伤与战斗兼容仍为规划。原生检查不能替代完整整合环境的游戏内验收。
+
+构建结构依据 [NeoForge 1.21.1 官方开发指南](https://docs.neoforged.net/docs/1.21.1/gettingstarted/) 与 [ModDevGradle MDK](https://github.com/NeoForgeMDKs/MDK-1.21.1-ModDevGradle)。最低版本来源见 [Sable 2.0.0 发布记录](https://modrinth.com/mod/sable/version/NGuyFOeE)。
+
+

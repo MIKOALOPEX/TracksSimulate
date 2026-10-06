@@ -1,0 +1,253 @@
+[
+  {
+    "profile": "base",
+    "passed": true,
+    "errors": [],
+    "mods": {
+      "minecraft": {
+        "version": "1.21.1",
+        "origin": "platform"
+      },
+      "neoforge": {
+        "version": "21.1.248",
+        "origin": "platform"
+      },
+      "create": {
+        "version": "6.0.10",
+        "origin": "create-6.0.10.jar"
+      },
+      "flywheel": {
+        "version": "1.0.6",
+        "origin": "create-6.0.10.jar!META-INF/jarjar/flywheel-neoforge-1.21.1-1.0.6.jar"
+      },
+      "ponder": {
+        "version": "1.0.82+mc1.21.1",
+        "origin": "create-6.0.10.jar!META-INF/jarjar/ponder-neoforge-1.0.82+mc1.21.1.jar"
+      },
+      "sable": {
+        "version": "2.0.5",
+        "origin": "sable-2.0.5.jar"
+      },
+      "sablecompanion": {
+        "version": "1.6.0",
+        "origin": "sable-2.0.5.jar!META-INF/jarjar/sable-companion-common-1.21.1-1.6.0.jar"
+      },
+      "veil": {
+        "version": "4.3.2",
+        "origin": "sable-2.0.5.jar!META-INF/jarjar/veil-neoforge-1.21.1-4.3.2.jar"
+      }
+    }
+  },
+  {
+    "profile": "gearwork",
+    "passed": true,
+    "errors": [],
+    "mods": {
+      "minecraft": {
+        "version": "1.21.1",
+        "origin": "platform"
+      },
+      "neoforge": {
+        "version": "21.1.248",
+        "origin": "platform"
+      },
+      "create": {
+        "version": "6.0.10",
+        "origin": "create-6.0.10.jar"
+      },
+      "flywheel": {
+        "version": "1.0.6",
+        "origin": "create-6.0.10.jar!META-INF/jarjar/flywheel-neoforge-1.21.1-1.0.6.jar"
+      },
+      "ponder": {
+        "version": "1.0.82+mc1.21.1",
+        "origin": "create-6.0.10.jar!META-INF/jarjar/ponder-neoforge-1.0.82+mc1.21.1.jar"
+      },
+      "gearwork": {
+        "version": "1.0.0",
+        "origin": "gearwork-1.0.0.jar"
+      },
+      "ldlib2": {
+        "version": "2.2.33",
+        "origin": "ldlib2-2.2.33.jar"
+      },
+      "sable": {
+        "version": "2.0.5",
+        "origin": "sable-2.0.5.jar"
+      },
+      "sablecompanion": {
+        "version": "1.6.0",
+        "origin": "sable-2.0.5.jar!META-INF/jarjar/sable-companion-common-1.21.1-1.6.0.jar"
+      },
+      "veil": {
+        "version": "4.3.2",
+        "origin": "sable-2.0.5.jar!META-INF/jarjar/veil-neoforge-1.21.1-4.3.2.jar"
+      },
+      "sable_schematic_api": {
+        "version": "1.0.1",
+        "origin": "sable_schematic_api-1.0.1.jar"
+      },
+      "synaxis": {
+        "version": "1.5.1",
+        "origin": "synaxis-1.5.1.jar"
+      }
+    }
+  },
+  {
+    "profile": "tracks",
+    "passed": true,
+    "errors": [],
+    "mods": {
+      "minecraft": {
+        "version": "1.21.1",
+        "origin": "platform"
+      },
+      "neoforge": {
+        "version": "21.1.248",
+        "origin": "platform"
+      },
+      "create": {
+        "version": "6.0.10",
+        "origin": "create-6.0.10.jar"
+      },
+      "flywheel": {
+        "version": "1.0.6",
+        "origin": "create-6.0.10.jar!META-INF/jarjar/flywheel-neoforge-1.21.1-1.0.6.jar"
+      },
+      "ponder": {
+        "version": "1.0.82+mc1.21.1",
+        "origin": "create-6.0.10.jar!META-INF/jarjar/ponder-neoforge-1.0.82+mc1.21.1.jar"
+      },
+      "offroad": {
+        "version": "1.3.0",
+        "origin": "offroad-1.3.0.jar"
+      },
+      "sable": {
+        "version": "2.0.5",
+        "origin": "sable-2.0.5.jar"
+      },
+      "sablecompanion": {
+        "version": "1.6.0",
+        "origin": "sable-2.0.5.jar!META-INF/jarjar/sable-companion-common-1.21.1-1.6.0.jar"
+      },
+      "veil": {
+        "version": "4.3.2",
+        "origin": "sable-2.0.5.jar!META-INF/jarjar/veil-neoforge-1.21.1-4.3.2.jar"
+      },
+      "simulated": {
+        "version": "1.3.0",
+        "origin": "simulated-1.3.0.jar"
+      },
+      "tracks": {
+        "version": "1.0.1",
+        "origin": "tracks-1.0.1.jar"
+      }
+    }
+  },
+  {
+    "profile": "combined",
+    "passed": true,
+    "errors": [],
+    "mods": {
+      "minecraft": {
+        "version": "1.21.1",
+        "origin": "platform"
+      },
+      "neoforge": {
+        "version": "21.1.248",
+        "origin": "platform"
+      },
+      "create": {
+        "version": "6.0.10",
+        "origin": "create-6.0.10.jar"
+      },
+      "flywheel": {
+        "version": "1.0.6",
+        "origin": "create-6.0.10.jar!META-INF/jarjar/flywheel-neoforge-1.21.1-1.0.6.jar"
+      },
+      "ponder": {
+        "version": "1.0.82+mc1.21.1",
+        "origin": "create-6.0.10.jar!META-INF/jarjar/ponder-neoforge-1.0.82+mc1.21.1.jar"
+      },
+      "gearwork": {
+        "version": "1.0.0",
+        "origin": "gearwork-1.0.0.jar"
+      },
+      "ldlib2": {
+        "version": "2.2.33",
+        "origin": "ldlib2-2.2.33.jar"
+      },
+      "offroad": {
+        "version": "1.3.0",
+        "origin": "offroad-1.3.0.jar"
+      },
+      "sable": {
+        "version": "2.0.5",
+        "origin": "sable-2.0.5.jar"
+      },
+      "sablecompanion": {
+        "version": "1.6.0",
+        "origin": "sable-2.0.5.jar!META-INF/jarjar/sable-companion-common-1.21.1-1.6.0.jar"
+      },
+      "veil": {
+        "version": "4.3.2",
+        "origin": "sable-2.0.5.jar!META-INF/jarjar/veil-neoforge-1.21.1-4.3.2.jar"
+      },
+      "sable_schematic_api": {
+        "version": "1.0.1",
+        "origin": "sable_schematic_api-1.0.1.jar"
+      },
+      "simulated": {
+        "version": "1.3.0",
+        "origin": "simulated-1.3.0.jar"
+      },
+      "synaxis": {
+        "version": "1.5.1",
+        "origin": "synaxis-1.5.1.jar"
+      },
+      "tracks": {
+        "version": "1.0.1",
+        "origin": "tracks-1.0.1.jar"
+      }
+    }
+  },
+  {
+    "profile": "base-2.0.0",
+    "passed": true,
+    "errors": [],
+    "mods": {
+      "minecraft": {
+        "version": "1.21.1",
+        "origin": "platform"
+      },
+      "neoforge": {
+        "version": "21.1.248",
+        "origin": "platform"
+      },
+      "create": {
+        "version": "6.0.10",
+        "origin": "create-6.0.10.jar"
+      },
+      "flywheel": {
+        "version": "1.0.6",
+        "origin": "create-6.0.10.jar!META-INF/jarjar/flywheel-neoforge-1.21.1-1.0.6.jar"
+      },
+      "ponder": {
+        "version": "1.0.82+mc1.21.1",
+        "origin": "create-6.0.10.jar!META-INF/jarjar/ponder-neoforge-1.0.82+mc1.21.1.jar"
+      },
+      "sable": {
+        "version": "2.0.0",
+        "origin": "sable-2.0.0.jar"
+      },
+      "sablecompanion": {
+        "version": "1.6.0",
+        "origin": "sable-2.0.0.jar!META-INF/jarjar/sable-companion-common-1.21.1-1.6.0.jar"
+      },
+      "veil": {
+        "version": "4.1.4",
+        "origin": "sable-2.0.0.jar!META-INF/jarjar/veil-neoforge-1.21.1-4.1.4.jar"
+      }
+    }
+  }
+]

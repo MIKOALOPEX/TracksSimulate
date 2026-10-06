@@ -1,0 +1,7 @@
+{
+  "itemGroup.trackssimulate": "履带模拟 · 原型",
+  "block.trackssimulate.drive_wheel": "导轮",
+  "block.trackssimulate.road_wheel": "负重轮",
+  "block.trackssimulate.return_wheel": "托带轮",
+  "item.trackssimulate.track_debug_stick": "履带调试棒"
+}
