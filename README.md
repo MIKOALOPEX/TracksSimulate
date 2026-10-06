@@ -34,51 +34,7 @@ Minecraft **1.21.1** / Java **21** / NeoForge **21.1.248**。当前为 **0.5.11-
 
 这里的“最新”指本项目最新源码；Minecraft、加载器与模组依赖保持锁定版本，不会在每次启动时自动升级。首次缺失的依赖和游戏资源仍需联网准备。关闭游戏后控制台保留退出信息；存档和日志位于 `test-environment/combined/`。后续修改完成后由用户自行启动，助手不主动打开测试客户端。
 
-在本目录打开 PowerShell：
-
-```powershell
-# 编译并运行无需 Minecraft 的几何/接触检查；产物位于 build/libs/trackssimulate-0.5.11-prototype.jar
-.\scripts\gradle.ps1 build
-
-# 新项目最小环境：Create + Sable 2.0.5 + 当前项目源码
-.\scripts\gradle.ps1 runClient -PtestProfile=base
-
-# 两个参考模组及完整最小依赖集合
-.\scripts\gradle.ps1 runClient -PtestProfile=combined
-
-# 单独参考对照（各自保存世界、配置、日志）
-.\scripts\gradle.ps1 runClient -PtestProfile=gearwork
-.\scripts\gradle.ps1 runClient -PtestProfile=tracks
-
-# 最低 Sable 版本的基础环境
-.\scripts\gradle.ps1 runClient '-PtestProfile=base-2.0.0'
-
-# 检查依赖闭包、重复模组和 SHA-256
-python scripts/audit_environment.py
-
-# 编译后生成本地测试压缩包
-python scripts/package_testpacks.py
-```
-
 每个环境位于 `test-environment/<配置名>/`。运行时自动加载本项目源码，**不要再把构建产物放入这些环境的 mods 文件夹**，否则会重复加载。原始 `D:\.minecraft\versions\克莱星2.0L` 和原存档不参与测试写入。
-
-`scripts/check_native_suspension.py` 是早期原生悬挂夹具，不能验证当前整车多履带求解器，不作为本阶段验收测试。
-
-脚本每次从 Windows 当前用户 Internet Settings 读取启用的代理，并通过本次命令行覆盖全局 Gradle 的旧代理。未启用系统代理时清空 HTTP/HTTPS 代理主机。支持单一代理和 `http=...;https=...` 格式；不自动解析 PAC。Java 从 JAVA_HOME / PATH 获取，当前机器已有 Java 21。
-
-## 重建本地依赖
-
-`dist/` 保留此前基础工程的 base 和 combined ZIP，本轮未重新生成，不能把旧 ZIP 当作当前轮组原型。需要时运行下面的打包脚本生成对应版本包。日常直接用测试 BAT 即可，Gradle 环境加载当前项目源码，无需导入 JAR。原测试环境验证范围与已知资源问题见 `docs/VALIDATION.md`。
-
-```powershell
-python scripts/fetch_baseline.py
-python scripts/prepare_environment.py --source 'D:\.minecraft\versions\克莱星2.0L'
-python scripts/audit_environment.py
-```
-
-`fetch_baseline.py` 下载官方 Sable 2.0.0 NeoForge 发布包并验证 SHA-512；其它依赖直接来自用户提供的整合包。`prepare_environment.py` 只复制指定版本，并从航空学 bundle 中提取 Simulated / Offroad 原始内嵌 JAR，不修改其内容。重复执行不会删除测试世界和用户添加的文件；新增或残留 JAR 会由审计脚本报告。
-
-`dependency-lock.json` 记录具体版本、来源、内嵌路径和 SHA-256；`docs/dependency-audit.json` 记录各配置审计结果。二进制依赖仅用于本机开发测试，不包含在新模组产物里。参考模组的代码和资源没有复制到新项目。
 
 ## 版本范围
 
