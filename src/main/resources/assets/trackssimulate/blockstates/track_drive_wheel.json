@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "trackssimulate:block/track_drive_wheel",
+      "y": 0
+    },
+    "facing=east": {
+      "model": "trackssimulate:block/track_drive_wheel",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "trackssimulate:block/track_drive_wheel",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "trackssimulate:block/track_drive_wheel",
+      "y": 270
+    }
+  }
+}

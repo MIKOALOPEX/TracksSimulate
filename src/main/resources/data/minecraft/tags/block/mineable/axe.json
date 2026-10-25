@@ -1,0 +1,13 @@
+{
+  "replace": false,
+  "values": [
+    "trackssimulate:track_mount",
+    "trackssimulate:small_suspension_track",
+    "trackssimulate:suspension_track",
+    "trackssimulate:large_suspension_track",
+    "trackssimulate:small_track_drive_wheel",
+    "trackssimulate:track_drive_wheel",
+    "trackssimulate:large_track_drive_wheel",
+    "trackssimulate:track_guide_wheel"
+  ]
+}

@@ -1,6 +1,1 @@
-{
-  "pack": {
-    "description": "Tracks Simulate resources",
-    "pack_format": 34
-  }
-}
+{"pack": {"pack_format": 34, "description": "Tracks Simulate rebuilt resources"}}

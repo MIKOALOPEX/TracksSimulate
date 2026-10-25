@@ -2,113 +2,160 @@ plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.148'
 }
-
 version = mod_version
 group = 'dev.trackssimulate'
-base { archivesName = mod_id }
+base { archivesName = 'trackssimulate' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
-
-def testProfile = providers.gradleProperty('testProfile').getOrElse('base')
-if (!(testProfile in ['base', 'base-2.0.0', 'gearwork', 'tracks', 'combined'])) {
-    throw new GradleException("Unknown testProfile: ${testProfile}")
-}
+def sableVersion = providers.gradleProperty('sableVersion').getOrElse('2.0.5')
+if (!(sableVersion in ['2.0.0', '2.0.5'])) throw new GradleException('Unsupported test Sable version')
+def profile = "rebuilt-${sableVersion}"
+// Keep bundled distributions intact in every runtime; NeoForge loads their nested mods.
+def runtimeJars = ['create-6.0.10.jar', "sable-${sableVersion}.jar", 'create-aeronautics-bundled-1.21.1-1.3.0.jar'].collect { it.toString() }
 
 neoForge {
-    version = project.neo_version
+    version = neo_version
     runs {
         client {
             client()
-            gameDirectory = project.file("test-environment/${testProfile}")
+            gameDirectory = file("test-environment/${profile}")
             programArguments.addAll '--username', 'TrackTester', '--width', '1280', '--height', '720'
             jvmArgument '-Xmx4G'
         }
+        server {
+            server()
+            gameDirectory = file("test-environment/server-${sableVersion}")
+            programArgument '--nogui'
+            jvmArgument '-Xmx2G'
+        }
         configureEach { logLevel = org.slf4j.event.Level.INFO }
     }
-    mods {
-        trackssimulate { sourceSet sourceSets.main }
-    }
+    mods { trackssimulate { sourceSet sourceSets.main } }
 }
-
 dependencies {
-    // Runtime jars live exclusively in each profile's mods folder (avoid loading twice).
-    compileOnly files('libs/create-6.0.10.jar', 'libs/sable-2.0.0.jar')
+    compileOnly files(runtimeJars.collect { "libs/${it}" })
     compileOnly files(fileTree(dir: layout.buildDirectory.dir('compile-support'), include: ['*.jar'])).builtBy('prepareCompileSupport')
 }
-
-tasks.register('prepareCompileSupport', Sync) {
-    from(zipTree('libs/create-6.0.10.jar')) { include 'META-INF/jarjar/*.jar' }
-    from(zipTree('libs/sable-2.0.0.jar')) { include 'META-INF/jarjar/*companion*.jar' }
-    eachFile { path = name }
-    includeEmptyDirs = false
-    into layout.buildDirectory.dir('compile-support')
-}
-
-tasks.named('processResources', ProcessResources) {
-    def values = [mod_version: project.mod_version,
-                  sable_version_range: project.sable_version_range,
-                  create_version_range: project.create_version_range]
-    inputs.properties values
-    filesMatching('META-INF/neoforge.mods.toml') { expand values }
-}
-tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
-
-sourceSets {
-    geometryChecks {
-        java.srcDir 'src/geometryChecks/java'
-        compileClasspath = sourceSets.main.output
-        runtimeClasspath = output + compileClasspath
+tasks.register('prepareCompileSupport') {
+    // javac cannot see classes inside nested JARs. Index ALL embedded JARs into
+    // a generated compile-only cache; this cache is never copied into mods/.
+    inputs.files(runtimeJars.collect { file("libs/${it}") })
+    def cache = layout.buildDirectory.dir('compile-support')
+    outputs.dir(cache)
+    doLast {
+        def folder = cache.get().asFile
+        folder.mkdirs()
+        def retained = new HashSet<String>()
+        def visit
+        visit = { File archive, int depth ->
+            if (depth > 16) throw new GradleException("Nested JAR depth exceeded: ${archive}")
+            new java.util.zip.ZipFile(archive).withCloseable { zip ->
+                zip.entries().each { entry ->
+                    if (!entry.directory && entry.name.startsWith('META-INF/jarjar/') && entry.name.endsWith('.jar')) {
+                        byte[] bytes = zip.getInputStream(entry).withCloseable { it.readAllBytes() }
+                        def hash = java.security.MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
+                        def name = "${hash}-${entry.name.tokenize('/').last()}".toString()
+                        if (retained.add(name)) {
+                            def target = new File(folder, name)
+                            target.bytes = bytes
+                            visit(target, depth + 1)
+                        }
+                    }
+                }
+            }
+        }
+        runtimeJars.each { visit(file("libs/${it}"), 0) }
+        // Drop obsolete generated files only, never source or runtime dependencies.
+        folder.listFiles().findAll { it.isFile() && it.name.endsWith('.jar') && !retained.contains(it.name) }.each {
+            java.nio.file.Files.delete(it.toPath())
+        }
+        logger.lifecycle("Indexed ${retained.size()} nested JARs for compilation; runtime bundles remain intact.")
     }
 }
-tasks.register('geometryTest', JavaExec) {
-    dependsOn geometryChecksClasses
-    classpath = sourceSets.geometryChecks.runtimeClasspath
-    mainClass = 'dev.trackssimulate.track.TrackPathTest'
-    maxHeapSize = '128m'
+tasks.register('prepareTestMods', Copy) {
+    from(runtimeJars.collect { file("libs/${it}") })
+    into "test-environment/${profile}/mods"
+    doFirst {
+        def folder = file("test-environment/${profile}/mods")
+        def unexpected = folder.exists() ? folder.listFiles().findAll { it.name.endsWith('.jar') && !runtimeJars.contains(it.name) } : []
+        if (!unexpected.isEmpty()) throw new GradleException("Unexpected mods in isolated test profile: ${unexpected*.name}")
+    }
 }
-tasks.register('suspensionTest', JavaExec) {
-    dependsOn geometryChecksClasses
-    classpath = sourceSets.geometryChecks.runtimeClasspath
-    mainClass = 'dev.trackssimulate.physics.SuspensionSettingsTest'
-    maxHeapSize = '128m'
+tasks.register('prepareServerMods', Copy) {
+    from(runtimeJars.collect { file("libs/${it}") })
+    into "test-environment/server-${sableVersion}/mods"
+    doFirst {
+        def folder = file("test-environment/server-${sableVersion}/mods")
+        def unexpected = folder.exists() ? folder.listFiles().findAll { it.name.endsWith('.jar') && !runtimeJars.contains(it.name) } : []
+        if (!unexpected.isEmpty()) throw new GradleException("Unexpected mods in isolated server profile: ${unexpected*.name}")
+    }
 }
-tasks.register('wheelGeometryTest', JavaExec) {
-    dependsOn geometryChecksClasses
-    classpath = sourceSets.geometryChecks.runtimeClasspath
-    mainClass = 'dev.trackssimulate.wheel.WheelGeometryTest'
-    maxHeapSize = '128m'
+tasks.matching { it.name in ['prepareClientRun', 'runClient'] }.configureEach { dependsOn 'prepareTestMods' }
+tasks.matching { it.name in ['prepareServerRun', 'runServer'] }.configureEach { dependsOn 'prepareServerMods' }
+tasks.named('processResources', ProcessResources) {
+    inputs.property 'mod_version', project.mod_version
+    filesMatching('META-INF/neoforge.mods.toml') { expand mod_version: project.mod_version }
 }
-tasks.register('contactPhysicsTest', JavaExec) {
-    dependsOn geometryChecksClasses
-    classpath = sourceSets.geometryChecks.runtimeClasspath
-    mainClass = 'dev.trackssimulate.physics.ContactPhysicsTest'
-    maxHeapSize = '128m'
-}
-tasks.register('trackSupportTest', JavaExec) {
-    dependsOn geometryChecksClasses
-    classpath = sourceSets.geometryChecks.runtimeClasspath
-    mainClass = 'dev.trackssimulate.track.TrackSupportTest'
-    maxHeapSize = '128m'
-}
-tasks.named('check') { dependsOn 'geometryTest', 'suspensionTest', 'wheelGeometryTest', 'contactPhysicsTest', 'trackSupportTest' }
-tasks.register('beltStabilityTest', JavaExec) {
-    dependsOn geometryChecksClasses
-    classpath = sourceSets.geometryChecks.runtimeClasspath
-    mainClass = 'dev.trackssimulate.physics.BeltStabilityTest'
-    maxHeapSize = '128m'
-}
-tasks.named('check') { dependsOn 'beltStabilityTest' }
-tasks.register('voxelContactTest', JavaExec) {
-    dependsOn geometryChecksClasses
-    classpath = sourceSets.geometryChecks.runtimeClasspath
-    mainClass = 'dev.trackssimulate.physics.VoxelContactTest'
-    maxHeapSize = '128m'
-}
-tasks.named('check') { dependsOn 'voxelContactTest' }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.named('jar') { from('LICENSE', 'THIRD_PARTY_NOTICES.md') }
 
-tasks.register('beltSurfaceNormalTest', JavaExec) {
-    dependsOn geometryChecksClasses
-    classpath = sourceSets.geometryChecks.runtimeClasspath
-    mainClass = 'dev.trackssimulate.track.BeltSurfaceNormalTest'
-    maxHeapSize = '128m'
+// Pure geometry replay only: this task never launches a client or server.
+sourceSets {
+    orderedChecks {
+        java.srcDirs = ['src/orderedChecks/java', 'src/main/java']
+        java.include 'SurfaceContactChecks.java', 'dev/trackssimulate/physics/SurfaceProbes.java'
+        java.include 'SuspensionRoutingChecks.java', 'dev/trackssimulate/physics/SuspensionContactRouting.java'
+        java.include 'ContactValidityChecks.java', 'dev/trackssimulate/physics/ContactValidity.java', 'dev/trackssimulate/physics/ConstraintLinks.java'
+        java.include 'PassiveMotionChecks.java', 'BeltSurfaceChecks.java', 'dev/trackssimulate/trackpath/BeltSurface.java', 'DiagnosticLogChecks.java', 'dev/trackssimulate/diagnostics/AsyncDiagnosticLog.java', 'OrderedBeltChecks.java', 'TrackSettingsChecks.java', 'SuspensionPhysicsChecks.java', 'dev/trackssimulate/physics/SuspensionLimits.java', 'dev/trackssimulate/physics/SuspensionContactSolver.java', 'dev/trackssimulate/trackpath/OrderedBeltPath.java', 'dev/trackssimulate/trackpath/BeltTopologyPlanner.java', 'dev/trackssimulate/config/TrackSetting.java', 'dev/trackssimulate/config/DriveAxleMode.java', 'dev/trackssimulate/config/OffsetScope.java', 'dev/trackssimulate/config/TrackSyncPolicy.java'
+    }
 }
-tasks.named('check') { dependsOn 'beltSurfaceNormalTest' }
+tasks.register('checkOrderedBelts', JavaExec) {
+    dependsOn tasks.named('orderedChecksClasses')
+    classpath = sourceSets.orderedChecks.runtimeClasspath
+    mainClass = 'OrderedBeltChecks'
+}
+tasks.named('check') { dependsOn tasks.named('checkOrderedBelts') }
+
+tasks.register('checkTrackSettings', JavaExec) {
+    dependsOn tasks.named('orderedChecksClasses')
+    classpath = sourceSets.orderedChecks.runtimeClasspath
+    mainClass = 'TrackSettingsChecks'
+}
+tasks.named('check') { dependsOn tasks.named('checkTrackSettings') }
+
+tasks.register('checkSuspensionPhysics', JavaExec) {
+    dependsOn tasks.named('orderedChecksClasses')
+    classpath = sourceSets.orderedChecks.runtimeClasspath
+    mainClass = 'SuspensionPhysicsChecks'
+}
+tasks.named('check') { dependsOn tasks.named('checkSuspensionPhysics') }
+
+
+tasks.register('checkDiagnosticLog', JavaExec) {
+    dependsOn tasks.named('orderedChecksClasses')
+    classpath = sourceSets.orderedChecks.runtimeClasspath
+    mainClass = 'DiagnosticLogChecks'
+}
+tasks.named('check') { dependsOn tasks.named('checkDiagnosticLog') }
+
+['PassiveMotion', 'BeltSurface', 'SurfaceContact', 'ContactValidity', 'SuspensionRouting'].each { name ->
+    tasks.register('check' + name, JavaExec) {
+        dependsOn tasks.named('orderedChecksClasses')
+        classpath = sourceSets.orderedChecks.runtimeClasspath
+        mainClass = name + 'Checks'
+    }
+    tasks.named('check') { dependsOn tasks.named('check' + name) }
+}
+
+sourceSets {
+    engineChecks {
+        java.srcDirs = ['src/engineChecks/java']
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+    }
+}
+tasks.register('checkContactVoxels', JavaExec) {
+    dependsOn tasks.named('engineChecksClasses')
+    classpath = sourceSets.engineChecks.runtimeClasspath
+    mainClass = 'ContactVoxelChecks'
+}
+tasks.named('check') { dependsOn tasks.named('checkContactVoxels') }

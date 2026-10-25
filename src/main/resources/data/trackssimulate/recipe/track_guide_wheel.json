@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    {
+      "item": "minecraft:iron_nugget"
+    },
+    {
+      "item": "create:shaft"
+    },
+    {
+      "item": "create:belt_connector"
+    }
+  ],
+  "result": {
+    "id": "trackssimulate:track_guide_wheel",
+    "count": 1
+  }
+}
