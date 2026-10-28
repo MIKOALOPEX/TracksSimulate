@@ -1,4 +1,4 @@
-// Recovered from the verified rebuild.24 artifact; see docs/RESTORE_REBUILD24_2026-10-26.md.
+// Wheel configuration, suspension contacts and per-body force application.
 // Derived from qwxon Create Tracks 1.0.1 (MIT); see THIRD_PARTY_NOTICES.md.
 package dev.trackssimulate.content.blocks.sable_track;
 

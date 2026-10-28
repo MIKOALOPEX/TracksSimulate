@@ -1,4 +1,4 @@
-// Recovered from the verified rebuild.24 artifact; see docs/RESTORE_REBUILD24_2026-10-26.md.
+// Coupled suspension impulses, travel stops, friction and passive belt motion.
 package dev.trackssimulate.physics;
 
 import java.util.LinkedHashMap;

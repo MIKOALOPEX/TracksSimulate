@@ -1,4 +1,4 @@
-// Recovered from the verified rebuild.24 artifact; see docs/RESTORE_REBUILD24_2026-10-26.md.
+// Physics diagnostics aggregated into snapshots for background output.
 package dev.trackssimulate.diagnostics;
 
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
