@@ -1,8 +1,11 @@
+// Recovered from the verified rebuild.24 artifact; see docs/RESTORE_REBUILD24_2026-10-26.md.
 // Derived from qwxon Create Tracks 1.0.1 (MIT); see THIRD_PARTY_NOTICES.md.
 package dev.trackssimulate.content.blocks.sable_track;
 
 import com.google.common.collect.ImmutableList;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.simibubi.create.AllBlocks;
+import com.simibubi.create.content.kinetics.base.IRotate;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform;
@@ -12,14 +15,6 @@ import com.simibubi.create.foundation.blockEntity.behaviour.ValueSettingsBehavio
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour;
 import dev.engine_room.flywheel.lib.transform.PoseTransformStack;
 import dev.engine_room.flywheel.lib.transform.TransformStack;
-import dev.trackssimulate.TracksClient;
-import dev.trackssimulate.assembly.TrackAssemblies;
-import dev.trackssimulate.config.OffsetScope;
-import dev.trackssimulate.config.TrackSetting;
-import dev.trackssimulate.physics.SuspensionContactSolver;
-import dev.trackssimulate.content.items.SuspensionKeyItem;
-import dev.trackssimulate.index.TracksItems;
-import dev.trackssimulate.network.SelectTrackTuningModePayload;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.api.math.OrientedBoundingBox3d;
@@ -33,9 +28,31 @@ import dev.ryanhcode.sable.mixinterface.clip_overwrite.ClipContextExtension;
 import dev.ryanhcode.sable.physics.config.block_properties.PhysicsBlockPropertyHelper;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
-import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
-import java.util.Collection;
+import dev.trackssimulate.Tracks;
+import dev.trackssimulate.TracksClient;
+import dev.trackssimulate.assembly.AssemblyPackets;
+import dev.trackssimulate.assembly.TrackAssemblies;
+import dev.trackssimulate.assembly.TrackDriveNetwork;
+import dev.trackssimulate.config.OffsetScope;
+import dev.trackssimulate.config.TrackSetting;
+import dev.trackssimulate.config.TracksServerConfig;
+import dev.trackssimulate.content.items.SuspensionKeyItem;
+import dev.trackssimulate.diagnostics.TrackDiagnostics;
+import dev.trackssimulate.index.TracksItems;
+import dev.trackssimulate.network.SelectTrackTuningModePayload;
+import dev.trackssimulate.physics.SuspensionContactSolver;
+import dev.trackssimulate.physics.SuspensionLimits;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.WeakHashMap;
+import java.util.Map.Entry;
 import net.createmod.catnip.math.AngleHelper;
 import net.createmod.catnip.math.VecHelper;
 import net.minecraft.core.BlockPos;
@@ -44,7 +61,9 @@ import net.minecraft.core.Vec3i;
 import net.minecraft.core.Direction.Axis;
 import net.minecraft.core.Direction.AxisDirection;
 import net.minecraft.core.HolderLookup.Provider;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -56,8 +75,8 @@ import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.LevelAccessor;
-import net.minecraft.world.level.ClipContext.Block;
 import net.minecraft.world.level.ClipContext.Fluid;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -68,6 +87,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix3dc;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
@@ -85,34 +105,15 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    private static final double TRACK_MAX_SPRING_IMPULSE_SCALE = 0.9;
    private static final double TRACK_BUMP_STOP_CLEARANCE_SCALE = 0.95;
    private static final double TRACK_BUMP_STOP_FORCE_SCALE = 4.0;
-   private static final java.util.Map<ServerSubLevel, Integer> SUPPORT_COUNTS = new java.util.WeakHashMap<>();
-   private static final java.util.Map<ServerSubLevel, SuspensionFrame> SUSPENSION_FRAMES = new java.util.WeakHashMap<>();
-   private static final class SuspensionFrame {
-      final SuspensionContactSolver.Body body=new SuspensionContactSolver.Body();
-      final java.util.List<SableTrackBlockEntity> wheels=new java.util.ArrayList<>();
-      final double inverseMass;
-      final double[] inverseInertia;
-      final Vector3d centerOfMass;
-      boolean valid(){return inverseMass>0&&Double.isFinite(inverseMass)&&centerOfMass.isFinite()
-         &&java.util.Arrays.stream(inverseInertia).allMatch(Double::isFinite);}
-      SuspensionFrame(ServerSubLevel host) {
-         var mass=host.getMassTracker();var inertia=mass.getInverseInertiaTensor();
-         inverseMass=mass.getInverseMass();centerOfMass=new Vector3d(mass.getCenterOfMass());
-         inverseInertia=new double[]{inertia.m00(),inertia.m10(),inertia.m20(),
-            inertia.m01(),inertia.m11(),inertia.m21(),inertia.m02(),inertia.m12(),inertia.m22()};
-      }
-   }
+   private static final Map<ServerSubLevel, Integer> SUPPORT_COUNTS = new WeakHashMap<>();
+   private static final Map<ServerSubLevel, SableTrackBlockEntity.SuspensionFrame> SUSPENSION_FRAMES = new WeakHashMap<>();
    private SuspensionContactSolver.Contact pendingContact;
-   private SubLevel pendingOther;
    private long diagnosticNanos;
    private final Vector3d queuedForcePos = new Vector3d();
    private final Vector3d queuedForce = new Vector3d();
    private SableTrackBlockEntity.TrackStrengthValueBehaviour strength;
-   // Missing NBT uses the registered legacy part's original size.
    private double radiusOverride = Double.NaN;
    private double wheelWidth = 1.0;
-   public double wheelRadius() { return Double.isFinite(radiusOverride) ? radiusOverride : effectivePart().radius(); }
-   public double wheelWidth() { return wheelWidth; }
    private double extension = 0.0;
    private double targetExtension;
    private double lastSentExtension = Double.NaN;
@@ -128,148 +129,41 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    private double lastAngle;
    private double angle;
    private double angularVelocity = 0.0;
-   // Only assembly node zero owns passive material travel. No independent wheel phases.
    private boolean passiveMotion;
-   private double passiveDistance,passiveSpeed,passiveRender,passiveLastRender,lastSentPassiveDistance=Double.NaN,lastSentPassiveSpeed=Double.NaN;
-   private long passivePhysicsTick=-100,passiveSampleTick=-100,passiveReportTick=-100;
+   private double passiveDistance;
+   private double passiveSpeed;
+   private double passiveRender;
+   private double passiveLastRender;
+   private double lastSentPassiveDistance = Double.NaN;
+   private double lastSentPassiveSpeed = Double.NaN;
+   private long passivePhysicsTick = -100L;
+   private long passiveSampleTick = -100L;
+   private long passiveReportTick = -100L;
    private boolean lastSentPassive;
-   public boolean passiveMotion(){return passiveMotion;}
-   public double passiveDistance(float partial){return level.isClientSide?Mth.lerp(partial,passiveLastRender,passiveRender):passiveDistance;}
-   public void receivePassiveMotion(java.util.UUID id,long tick,double distance,double speed,boolean active) {
-      if(level==null||!level.isClientSide||beltIndex!=0||!id.equals(beltId)||tick<passiveSampleTick
-          ||!Double.isFinite(distance)||!Double.isFinite(speed))return;
-      if(!passiveMotion)passiveLastRender=passiveRender=distance;
-      passiveMotion=active;passiveDistance=distance;passiveSpeed=speed;passiveSampleTick=tick;
-   }
    private double touchingFriction = 1.0;
    private double springMultiplier = 1.0;
    private double dampingMultiplier = 1.0;
    private double bumpClearanceMultiplier = 1.0;
    private double bumpForceMultiplier = 1.0;
    private double maxImpulseMultiplier = 1.0;
-   private double maxExtensionOverride=Double.NaN, maxCompression=.45;
-   private double contactSpread=1, contactMargin=.25, forwardFriction=1, sideFriction=1;
-   public double maximumExtension(){return effectiveRole()==SableTrackRole.SUSPENSION
-      ?(Double.isFinite(maxExtensionOverride)?maxExtensionOverride:effectivePart().suspensionTravel()):0;}
-   public double maximumCompression(){return effectiveRole()==SableTrackRole.SUSPENSION?maxCompression:0;}
+   private double maxExtensionOverride = Double.NaN;
+   private double maxCompression = 0.45;
+   private double contactSpread = 1.0;
+   private double contactMargin = 0.25;
+   private double forwardFriction = 1.0;
+   private double sideFriction = 1.0;
    private boolean travelMigrationPending;
-   public double minimumExtension(){return effectiveRole()==SableTrackRole.SUSPENSION?maximumExtension()-maxCompression:0;}
-   private dev.trackssimulate.physics.SuspensionLimits suspensionLimits(){return new dev.trackssimulate.physics.SuspensionLimits(maximumExtension(),maxCompression,-heightOffset);}
-   public void validateTravelSettings(java.util.Map<TrackSetting,Double> values) {
-      if(effectiveRole()!=SableTrackRole.SUSPENSION)return;
-      double e=values.getOrDefault(TrackSetting.MAX_EXTENSION,maximumExtension());
-      double c=values.getOrDefault(TrackSetting.MAX_COMPRESSION,maxCompression);
-      double height=values.getOrDefault(TrackSetting.HEIGHT,heightOffset);
-      try {new dev.trackssimulate.physics.SuspensionLimits(e,c,-height);}
-      catch(IllegalArgumentException invalid) {
-         throw new IllegalArgumentException("轮 "+getBlockPos()+"：最大压缩必须满足 0 ≤ 压缩 ≤ 向下偏移＋最大伸长（当前允许 "+TrackSetting.format(e-height)
-            +" 格）；可同时编辑偏移/伸长/压缩，再点同步提交全部输入。本次未修改。");
-      }
-   }
-   public double defaultSettingValue(TrackSetting setting){
-      if(effectiveRole()==SableTrackRole.SUSPENSION) {
-         double e=Math.max(effectivePart().suspensionTravel(),heightOffset);
-         if(setting==TrackSetting.MAX_EXTENSION)return e;
-         if(setting==TrackSetting.MAX_COMPRESSION)return Math.min(setting.defaultValue,e-heightOffset);
-      }
-      return setting.defaultValue;
-   }
-   private java.util.UUID beltId;
+   private UUID beltId;
    private int beltIndex;
    private boolean settingsConfigured;
    private Player removalRecipient;
    private long removalTick;
-   public void removalRecipient(Player player){removalRecipient=player;removalTick=level==null?0:level.getGameTime();}
-   public Player removalRecipient(){return level!=null&&removalTick==level.getGameTime()?removalRecipient:null;}
-   public boolean settingsConfigured(){return settingsConfigured;}
-   /** One validated transaction writes each member once; never propagates implicitly. */
-   public void applyLocalSettings(java.util.Map<TrackSetting,Double> values) {
-      validateTravelSettings(values);
-      boolean changed=false;
-      for(var entry:values.entrySet()) {
-         var setting=entry.getKey();double v=entry.getValue();
-         if(!setting.supports(effectiveRole()==SableTrackRole.SUSPENSION,effectiveRole()==SableTrackRole.DRIVE)||!setting.accepts(v))continue;
-         if(Math.abs(getSettingValue(setting.key)-v)<1e-9)continue;
-         switch(setting) {
-            case STRENGTH -> {if(strength!=null)strength.value=(int)v;lastPropagatedStrength=protectedStrengthValue=(int)v;}
-            case SPRING -> springMultiplier=v;
-            case DAMPING -> dampingMultiplier=v;
-            case BUMP_CLEARANCE -> bumpClearanceMultiplier=v;
-            case BUMP_FORCE -> bumpForceMultiplier=v;
-            case MAX_IMPULSE -> maxImpulseMultiplier=v;
-            case DRIVE -> driveMultiplier=v;
-            case GRIP -> gripMultiplier=v;
-            case LATERAL -> lateralOffset=v;
-            case LONGITUDINAL -> longitudinalOffset=v;
-            case HEIGHT -> heightOffset=v;
-            case SCALE -> radiusOverride=TrackSetting.scaledRadius(effectivePart().radius(),v);
-            case WIDTH -> wheelWidth=v;
-            case HIDDEN -> visualSuspensionHidden=v==1;
-            case WHEEL_HIDDEN -> wheelHidden=v==1;
-            case CONNECTED_CONTACTS -> connectedContacts=v==1;
-            case SPEED -> speedMultiplier=v;
-            case MAX_EXTENSION -> maxExtensionOverride=v;
-            case MAX_COMPRESSION -> maxCompression=v;
-            case CONTACT_SPREAD -> contactSpread=v;
-            case CONTACT_MARGIN -> contactMargin=v;
-            case FRICTION_FORWARD -> forwardFriction=v;
-            case FRICTION_SIDE -> sideFriction=v;
-            case THROUGH_AXLE -> {
-               if(level!=null&&!level.isClientSide)KineticBlockEntity.switchToBlockState(level,worldPosition,getBlockState()
-                  .setValue(SableTrackBlock.AXLE_MODE,(int)v).setValue(SableTrackBlock.THROUGH_AXLE,v==1));
-            }
-         }
-         changed=true;
-      }
-      if(changed){
-         if(effectiveRole()==SableTrackRole.SUSPENSION) {
-            var limits=suspensionLimits();extension=limits.clamp(extension);targetExtension=limits.clamp(targetExtension);lastExtension=limits.clamp(lastExtension);
-         }
-         settingsConfigured=true;setChanged();invalidateRenderBoundingBox();sendData();
-      }
-   }
-
-   public java.util.UUID beltId() { return beltId; }
-   public int beltIndex() { return beltIndex; }
-   public void setBelt(java.util.UUID id,int index) {
-      if(!java.util.Objects.equals(id,beltId)){passiveMotion=false;passiveSpeed=passiveDistance=passiveRender=passiveLastRender=0;lastSentPassiveDistance=Double.NaN;}
-      beltId=id;beltIndex=index;setChanged();invalidateRenderBoundingBox();
-      if(level!=null&&!level.isClientSide)sendData();
-   }
-
-   private net.minecraft.world.level.block.state.BlockState material=com.simibubi.create.AllBlocks.COPYCAT_BASE.getDefaultState();
-   private ItemStack materialItem=ItemStack.EMPTY;
+   private BlockState material = AllBlocks.COPYCAT_BASE.getDefaultState();
+   private ItemStack materialItem = ItemStack.EMPTY;
    private boolean wheelHidden;
-   private boolean connectedContacts;
-   public boolean connectedContacts(){return connectedContacts;}
-   private double speedMultiplier=1;
-   public boolean hasMaterial(){return !material.is(com.simibubi.create.AllBlocks.COPYCAT_BASE.get());}
-   public net.minecraft.world.level.block.state.BlockState material(){return material;}
-   public ItemStack materialItem(){return materialItem.copy();}
-   public void setMaterial(net.minecraft.world.level.block.state.BlockState state,ItemStack item){
-      material=state;materialItem=item.isEmpty()?ItemStack.EMPTY:item.copyWithCount(1);setChanged();
-      if(level!=null&&!level.isClientSide){sendData();dev.trackssimulate.Tracks.LOGGER.info("[TS-MATERIAL] pos={} material={} stored={}",getBlockPos(),state,!materialItem.isEmpty());}
-   }
-   public boolean isWheelHidden(){return wheelHidden;}
-   public double speedMultiplier(){return speedMultiplier;}
-
-   // Transient graph-edit state; never serialized or sent as user configuration.
+   private double speedMultiplier = 1.0;
    public boolean beltKineticsMuted;
-   public java.util.List<BlockPos> detachingBeltPeers=java.util.List.of();
-   public float kineticStress(){return stress;}
-   public float kineticCapacity(){return capacity;}
-   @Override public java.util.List<BlockPos> addPropagationLocations(com.simibubi.create.content.kinetics.base.IRotate block,
-         BlockState state,java.util.List<BlockPos> neighbours) {
-      return dev.trackssimulate.assembly.TrackDriveNetwork.locations(this,super.addPropagationLocations(block,state,neighbours));
-   }
-   @Override public float propagateRotationTo(KineticBlockEntity target,BlockState from,BlockState to,BlockPos diff,
-         boolean axes,boolean cogs) {
-      return dev.trackssimulate.assembly.TrackDriveNetwork.connected(this,target)?1:super.propagateRotationTo(target,from,to,diff,axes,cogs);
-   }
-   @Override public boolean isCustomConnection(KineticBlockEntity other,BlockState state,BlockState otherState) {
-      return dev.trackssimulate.assembly.TrackDriveNetwork.connected(this,other)||super.isCustomConnection(other,state,otherState);
-   }
-
+   public List<BlockPos> detachingBeltPeers = List.of();
    private double driveMultiplier = 1.0;
    private double gripMultiplier = 1.0;
    private int lastPropagatedStrength = 16;
@@ -279,6 +173,304 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    private boolean visualSuspensionHidden = false;
    private DyeColor beltColor = null;
    private ItemStack heldItem = ItemStack.EMPTY;
+   private double diagnosticNormal;
+   private double diagnosticRpm;
+   private double diagnosticForward;
+   private double diagnosticSide;
+   private double diagnosticRawExtension;
+   private double diagnosticCompression;
+   private double diagnosticSpring;
+   private double diagnosticDamping;
+   private double diagnosticStopImpulse;
+   private double diagnosticStopPenetration;
+   private double diagnosticForwardImpulse;
+   private double diagnosticSideImpulse;
+   private BlockPos diagnosticHit;
+   private int diagnosticQueries;
+   private boolean diagnosticLimited;
+   private boolean diagnosticContact;
+
+   public double wheelRadius() {
+      return Double.isFinite(this.radiusOverride) ? this.radiusOverride : this.effectivePart().radius();
+   }
+
+   public double wheelWidth() {
+      return this.wheelWidth;
+   }
+
+   public boolean passiveMotion() {
+      return this.passiveMotion;
+   }
+
+   public double passiveDistance(float partial) {
+      return this.level.isClientSide ? Mth.lerp((double)partial, this.passiveLastRender, this.passiveRender) : this.passiveDistance;
+   }
+
+   public void receivePassiveMotion(UUID id, long tick, double distance, double speed, boolean active) {
+      if (this.level != null
+         && this.level.isClientSide
+         && this.beltIndex == 0
+         && id.equals(this.beltId)
+         && tick >= this.passiveSampleTick
+         && Double.isFinite(distance)
+         && Double.isFinite(speed)) {
+         if (!this.passiveMotion) {
+            this.passiveLastRender = this.passiveRender = distance;
+         }
+
+         this.passiveMotion = active;
+         this.passiveDistance = distance;
+         this.passiveSpeed = speed;
+         this.passiveSampleTick = tick;
+      }
+   }
+
+   public double maximumExtension() {
+      return this.effectiveRole() == SableTrackRole.SUSPENSION
+         ? (Double.isFinite(this.maxExtensionOverride) ? this.maxExtensionOverride : this.effectivePart().suspensionTravel())
+         : 0.0;
+   }
+
+   public double maximumCompression() {
+      return this.effectiveRole() == SableTrackRole.SUSPENSION ? this.maxCompression : 0.0;
+   }
+
+   public double minimumExtension() {
+      return this.effectiveRole() == SableTrackRole.SUSPENSION ? this.maximumExtension() - this.maxCompression : 0.0;
+   }
+
+   private SuspensionLimits suspensionLimits() {
+      return new SuspensionLimits(this.maximumExtension(), this.maxCompression, -this.heightOffset);
+   }
+
+   public void validateTravelSettings(Map<TrackSetting, Double> values) {
+      if (this.effectiveRole() == SableTrackRole.SUSPENSION) {
+         double e = values.getOrDefault(TrackSetting.MAX_EXTENSION, this.maximumExtension());
+         double c = values.getOrDefault(TrackSetting.MAX_COMPRESSION, this.maxCompression);
+         double height = values.getOrDefault(TrackSetting.HEIGHT, this.heightOffset);
+
+         try {
+            new SuspensionLimits(e, c, -height);
+         } catch (IllegalArgumentException var9) {
+            throw new IllegalArgumentException(
+               "轮 " + this.getBlockPos() + "：最大压缩必须满足 0 ≤ 压缩 ≤ 向下偏移＋最大伸长（当前允许 " + TrackSetting.format(e - height) + " 格）；可同时编辑偏移/伸长/压缩，再点同步提交全部输入。本次未修改。"
+            );
+         }
+      }
+   }
+
+   public double defaultSettingValue(TrackSetting setting) {
+      if (this.effectiveRole() == SableTrackRole.SUSPENSION) {
+         double e = Math.max(this.effectivePart().suspensionTravel(), this.heightOffset);
+         if (setting == TrackSetting.MAX_EXTENSION) {
+            return e;
+         }
+
+         if (setting == TrackSetting.MAX_COMPRESSION) {
+            return Math.min(setting.defaultValue, e - this.heightOffset);
+         }
+      }
+
+      return setting.defaultValue;
+   }
+
+   public void removalRecipient(Player player) {
+      this.removalRecipient = player;
+      this.removalTick = this.level == null ? 0L : this.level.getGameTime();
+   }
+
+   public Player removalRecipient() {
+      return this.level != null && this.removalTick == this.level.getGameTime() ? this.removalRecipient : null;
+   }
+
+   public boolean settingsConfigured() {
+      return this.settingsConfigured;
+   }
+
+   public void applyLocalSettings(Map<TrackSetting, Double> values) {
+      this.validateTravelSettings(values);
+      boolean changed = false;
+
+      for (Entry<TrackSetting, Double> entry : values.entrySet()) {
+         TrackSetting setting = entry.getKey();
+         double v = entry.getValue();
+         if (setting.supports(this.effectiveRole() == SableTrackRole.SUSPENSION, this.effectiveRole() == SableTrackRole.DRIVE)
+            && setting.accepts(v)
+            && !(Math.abs(this.getSettingValue(setting.key) - v) < 1.0E-9)) {
+            switch (setting) {
+               case STRENGTH:
+                  if (this.strength != null) {
+                     this.strength.value = (int)v;
+                  }
+
+                  this.lastPropagatedStrength = this.protectedStrengthValue = (int)v;
+                  break;
+               case SPRING:
+                  this.springMultiplier = v;
+                  break;
+               case DAMPING:
+                  this.dampingMultiplier = v;
+                  break;
+               case BUMP_CLEARANCE:
+                  this.bumpClearanceMultiplier = v;
+                  break;
+               case BUMP_FORCE:
+                  this.bumpForceMultiplier = v;
+                  break;
+               case MAX_IMPULSE:
+                  this.maxImpulseMultiplier = v;
+                  break;
+               case DRIVE:
+                  this.driveMultiplier = v;
+                  break;
+               case GRIP:
+                  this.gripMultiplier = v;
+                  break;
+               case LATERAL:
+                  this.lateralOffset = v;
+                  break;
+               case LONGITUDINAL:
+                  this.longitudinalOffset = v;
+                  break;
+               case HEIGHT:
+                  this.heightOffset = v;
+                  break;
+               case SCALE:
+                  this.radiusOverride = TrackSetting.scaledRadius(this.effectivePart().radius(), v);
+                  break;
+               case WIDTH:
+                  this.wheelWidth = v;
+                  break;
+               case HIDDEN:
+                  this.visualSuspensionHidden = v == 1.0;
+                  break;
+               case WHEEL_HIDDEN:
+                  this.wheelHidden = v == 1.0;
+                  break;
+               case SPEED:
+                  this.speedMultiplier = v;
+                  break;
+               case MAX_EXTENSION:
+                  this.maxExtensionOverride = v;
+                  break;
+               case MAX_COMPRESSION:
+                  this.maxCompression = v;
+                  break;
+               case CONTACT_SPREAD:
+                  this.contactSpread = v;
+                  break;
+               case CONTACT_MARGIN:
+                  this.contactMargin = v;
+                  break;
+               case FRICTION_FORWARD:
+                  this.forwardFriction = v;
+                  break;
+               case FRICTION_SIDE:
+                  this.sideFriction = v;
+                  break;
+               case THROUGH_AXLE:
+                  if (this.level != null && !this.level.isClientSide) {
+                     KineticBlockEntity.switchToBlockState(
+                        this.level,
+                        this.worldPosition,
+                        (BlockState)((BlockState)this.getBlockState().setValue(SableTrackBlock.AXLE_MODE, (int)v))
+                           .setValue(SableTrackBlock.THROUGH_AXLE, v == 1.0)
+                     );
+                  }
+            }
+
+            changed = true;
+         }
+      }
+
+      if (changed) {
+         if (this.effectiveRole() == SableTrackRole.SUSPENSION) {
+            SuspensionLimits limits = this.suspensionLimits();
+            this.extension = limits.clamp(this.extension);
+            this.targetExtension = limits.clamp(this.targetExtension);
+            this.lastExtension = limits.clamp(this.lastExtension);
+         }
+
+         this.settingsConfigured = true;
+         this.setChanged();
+         this.invalidateRenderBoundingBox();
+         this.sendData();
+      }
+   }
+
+   public UUID beltId() {
+      return this.beltId;
+   }
+
+   public int beltIndex() {
+      return this.beltIndex;
+   }
+
+   public void setBelt(UUID id, int index) {
+      if (!Objects.equals(id, this.beltId)) {
+         this.passiveMotion = false;
+         this.passiveSpeed = this.passiveDistance = this.passiveRender = this.passiveLastRender = 0.0;
+         this.lastSentPassiveDistance = Double.NaN;
+      }
+
+      this.beltId = id;
+      this.beltIndex = index;
+      this.setChanged();
+      this.invalidateRenderBoundingBox();
+      if (this.level != null && !this.level.isClientSide) {
+         this.sendData();
+      }
+   }
+
+   public boolean hasMaterial() {
+      return !this.material.is((Block)AllBlocks.COPYCAT_BASE.get());
+   }
+
+   public BlockState material() {
+      return this.material;
+   }
+
+   public ItemStack materialItem() {
+      return this.materialItem.copy();
+   }
+
+   public void setMaterial(BlockState state, ItemStack item) {
+      this.material = state;
+      this.materialItem = item.isEmpty() ? ItemStack.EMPTY : item.copyWithCount(1);
+      this.setChanged();
+      if (this.level != null && !this.level.isClientSide) {
+         this.sendData();
+         Tracks.LOGGER.info("[TS-MATERIAL] pos={} material={} stored={}", new Object[]{this.getBlockPos(), state, !this.materialItem.isEmpty()});
+      }
+   }
+
+   public boolean isWheelHidden() {
+      return this.wheelHidden;
+   }
+
+   public double speedMultiplier() {
+      return this.speedMultiplier;
+   }
+
+   public float kineticStress() {
+      return this.stress;
+   }
+
+   public float kineticCapacity() {
+      return this.capacity;
+   }
+
+   public List<BlockPos> addPropagationLocations(IRotate block, BlockState state, List<BlockPos> neighbours) {
+      return TrackDriveNetwork.locations(this, super.addPropagationLocations(block, state, neighbours));
+   }
+
+   public float propagateRotationTo(KineticBlockEntity target, BlockState from, BlockState to, BlockPos diff, boolean axes, boolean cogs) {
+      return TrackDriveNetwork.connected(this, target) ? 1.0F : super.propagateRotationTo(target, from, to, diff, axes, cogs);
+   }
+
+   public boolean isCustomConnection(KineticBlockEntity other, BlockState state, BlockState otherState) {
+      return TrackDriveNetwork.connected(this, other) || super.isCustomConnection(other, state, otherState);
+   }
 
    public SableTrackBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
       super(type, pos, state);
@@ -288,154 +480,157 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
       }
    }
 
-   private record ContactLoad(ServerSubLevel host,Vec3 point,SubLevel other,Vec3 otherPoint,
-         SableTrackBlockEntity root,SableTrackBlockEntity source,SuspensionContactSolver.Contact contact,double rolling,boolean surface) {}
-
    public static void applyAllBatchedForces(ServerLevel level, double timeStep) {
-      dev.trackssimulate.physics.ConnectedBodies.maintain(level);
-      dev.trackssimulate.physics.SurfaceContacts.prune(level);
-      var frames=new java.util.LinkedHashMap<ServerSubLevel,SuspensionFrame>();
-      var iterator=SUSPENSION_FRAMES.entrySet().iterator();
-      while(iterator.hasNext()) {
-         var e=iterator.next();if(e.getKey().isRemoved()){iterator.remove();continue;}
-         if(e.getKey().getLevel()!=level)continue;
-         if(e.getValue().valid())frames.put(e.getKey(),e.getValue());iterator.remove();
-      }
-      var active=new java.util.ArrayList<>(frames.entrySet());
-      var loads=new java.util.ArrayList<ContactLoad>();
-      var batches=new java.util.IdentityHashMap<ServerSubLevel,dev.trackssimulate.physics.SurfaceContacts.Batch>();
-      var passive=new java.util.LinkedHashMap<SableTrackBlockEntity,SuspensionContactSolver.FreeBelt>();
-      for(var entry:active) {
-         var host=entry.getKey();var frame=entry.getValue();
-         frame.wheels.removeIf(w->w.isRemoved()||Sable.HELPER.getContaining(w)!=host);
-         frame.wheels.sort(java.util.Comparator.comparingLong(w->w.getBlockPos().asLong()));
-         var batch=dev.trackssimulate.physics.SurfaceContacts.collect(host,frame.wheels,timeStep);batches.put(host,batch);
-         // Wide wheel/belt samples supplement the narrow suspension cast, never add a
-         // second rigid row in parallel with it. One spring and one stop per wheel.
-         for(var support:batch.supports()) {
-            var wheel=support.wheel();
-            if(support.rawExtension()<wheel.diagnosticRawExtension) {
-               long supplementStart=System.nanoTime();
-               wheel.applySuspensionTerrain(host,timeStep,frame,new TerrainCastResult(
-                  support.rawExtension()+wheel.wheelRadius(),support.normal(),support.other(),support.block(),support.point()));
-               wheel.diagnosticNanos+=System.nanoTime()-supplementStart;
+      Iterator<Entry<ServerSubLevel, SableTrackBlockEntity.SuspensionFrame>> iterator = SUSPENSION_FRAMES.entrySet().iterator();
+
+      while (iterator.hasNext()) {
+         Entry<ServerSubLevel, SableTrackBlockEntity.SuspensionFrame> entry = iterator.next();
+         ServerSubLevel host = entry.getKey();
+         SableTrackBlockEntity.SuspensionFrame frame = entry.getValue();
+         if (host.isRemoved()) {
+            iterator.remove();
+         } else if (host.getLevel() == level) {
+            frame.wheels.removeIf(wheelx -> wheelx.isRemoved() || Sable.HELPER.getContaining(wheelx) != host);
+            frame.wheels.sort(Comparator.comparingLong(wheelx -> wheelx.getBlockPos().asLong()));
+            ArrayList<SuspensionContactSolver.Contact> contacts = new ArrayList<>();
+
+            for (SableTrackBlockEntity wheel : frame.wheels) {
+               if (wheel.pendingContact != null) {
+                  contacts.add(wheel.pendingContact);
+               }
             }
-         }
-         for(var wheel:frame.wheels)if(wheel.pendingContact!=null) {
-            var members=TrackAssemblies.members(wheel);var a=TrackAssemblies.get(wheel);
-            var point=JOMLConversion.toMojang(wheel.queuedForcePos);
-            loads.add(new ContactLoad(host,point,wheel.pendingOther,oppositePoint(host,point,wheel.pendingOther),
-               members.getFirst(),wheel,wheel.pendingContact,a==null?1:a.sides().get(wheel.beltIndex),false));
-         }
-         for(var hit:batch.contacts()) {
-            var w=hit.source();var point=hit.point();var n=JOMLConversion.toJOML(hit.normal());
-            var tangent=JOMLConversion.toJOML(hit.tangent());tangent.fma(-tangent.dot(n),n);
-            double projection=Math.min(1,tangent.length());
-            if(projection<1e-6)tangent.set(Math.abs(n.y)<.9?new Vector3d(0,1,0):new Vector3d(1,0,0)).cross(n).normalize();
-            else tangent.div(projection);
-            var side=new Vector3d(n).cross(tangent).normalize();
-            var velocity=Sable.HELPER.getVelocity(level,JOMLConversion.toJOML(point));
-            var otherPoint=oppositePoint(host,point,hit.other());
-            if(hit.other()!=null)velocity.sub(Sable.HELPER.getVelocity(level,JOMLConversion.toJOML(otherPoint)));
-            host.logicalPose().transformNormalInverse(velocity);
-            double vn=velocity.dot(n),brake=level.getSignal(w.getBlockPos().above(),Direction.DOWN)/15.0;
-            var a=TrackAssemblies.get(w);int winding=a==null?1:a.sides().get(w.beltIndex);
-            double target=-TrackAssemblies.rpm(w)*Math.PI*2/60*w.wheelRadius()*winding*projection*(1-brake);
-            var lever=JOMLConversion.toJOML(point).sub(frame.centerOfMass);
-            // Compliance scales with mass; increasing the drive gain changes response, never RPM.
-            double soft=frame.inverseMass/(Math.max(1e-6,timeStep)*24*w.driveMultiplier);
-            var contact=new SuspensionContactSolver.Contact(
-               contactRow(frame,lever,n,vn,dev.trackssimulate.physics.SurfaceProbes.normalTarget(hit.penetration(),timeStep),0),null,
-               contactRow(frame,lever,tangent,velocity.dot(tangent),target,(1-brake)*soft),
-               contactRow(frame,lever,side,velocity.dot(side),0,soft),
-               (Math.abs(vn)+2+20*timeStep)/frame.inverseMass,
-               hit.friction()*w.gripMultiplier*w.forwardFriction,hit.friction()*w.gripMultiplier*w.sideFriction);
-            loads.add(new ContactLoad(host,point,hit.other(),otherPoint,hit.root(),w,contact,projection,true));
-         }
-         var checked=new java.util.HashSet<java.util.UUID>();
-         for(var wheel:frame.wheels) {
-            if(wheel.beltId==null||!checked.add(wheel.beltId))continue;
-            var a=TrackAssemblies.get(wheel);var members=TrackAssemblies.members(wheel);
-            if(a==null||members.size()!=a.offsets().size()||members.stream().anyMatch(w->w.isRemoved()
-                  ||TrackAssemblies.axis(w)!=a.axis()||Sable.HELPER.getContaining(w)!=host||w.effectiveRole()==SableTrackRole.DRIVE))continue;
-            var root=members.getFirst();
-            var rolling=new SuspensionContactSolver.FreeBelt(members.size()*dev.trackssimulate.config.TracksServerConfig.PASSIVE_ROLLING_MASS.get(),root.passiveMotion?root.passiveSpeed:0);
-            double brake=0;for(var w:members)brake=Math.max(brake,level.getSignal(w.getBlockPos().above(),Direction.DOWN)/15.0);
-            if(brake>=1)rolling.speed=0;
-            rolling.brake(brake);passive.put(root,rolling);
-         }
-      }
-      for(var load:loads) {
-         var rolling=passive.get(load.root);
-         if(rolling!=null) {
-            if(rolling.brake()>=1)load.contact.forward().lockRolling();
-            else load.contact.forward().couple(rolling,load.rolling);
-         }
-         if(load.other instanceof ServerSubLevel other&&!other.isRemoved()&&other.getMassTracker().getInverseMass()>0) {
-            var frame=frames.computeIfAbsent(other,SuspensionFrame::new);
-            if(!frame.valid())continue;
-            var lever=JOMLConversion.toJOML(load.otherPoint).sub(frame.centerOfMass);
-            for(var row:rows(load.contact))if(row!=null) {
-               var direction=new Vector3d(row.j[0],row.j[1],row.j[2]);load.host.logicalPose().transformNormal(direction);
-               other.logicalPose().transformNormalInverse(direction).negate();
-               row.react(contactRow(frame,lever,direction,0,0,0));
+
+            long start = System.nanoTime();
+            LinkedHashMap<SableTrackBlockEntity, SuspensionContactSolver.FreeBelt> passive = new LinkedHashMap<>();
+            HashSet<UUID> checked = new HashSet<>();
+
+            for (SableTrackBlockEntity wheelx : frame.wheels) {
+               if (wheelx.beltId != null && checked.add(wheelx.beltId)) {
+                  TrackAssemblies.Assembly assembly = TrackAssemblies.get(wheelx);
+                  List<SableTrackBlockEntity> members = TrackAssemblies.members(wheelx);
+                  if (assembly != null
+                     && members.size() == assembly.offsets().size()
+                     && !members.stream()
+                        .anyMatch(
+                           w -> w.isRemoved()
+                                 || TrackAssemblies.axis(w) != assembly.axis()
+                                 || Sable.HELPER.getContaining(w) != host
+                                 || w.effectiveRole() == SableTrackRole.DRIVE
+                        )) {
+                     SableTrackBlockEntity root = members.getFirst();
+                     SuspensionContactSolver.FreeBelt rolling = new SuspensionContactSolver.FreeBelt(
+                        (double)members.size() * (Double)TracksServerConfig.PASSIVE_ROLLING_MASS.get(), root.passiveMotion ? root.passiveSpeed : 0.0
+                     );
+                     double brake = 0.0;
+
+                     for (SableTrackBlockEntity member : members) {
+                        brake = Math.max(brake, (double)level.getSignal(member.getBlockPos().above(), Direction.DOWN) / 15.0);
+                     }
+
+                     if (brake >= 1.0) {
+                        rolling.speed = 0.0;
+
+                        for (SableTrackBlockEntity member : members) {
+                           if (member.pendingContact != null) {
+                              member.pendingContact.forward().lockRolling();
+                           }
+                        }
+                     } else {
+                        for (SableTrackBlockEntity memberx : members) {
+                           if (memberx.pendingContact != null) {
+                              memberx.pendingContact.forward().couple(rolling, (double)assembly.sides().get(memberx.beltIndex).intValue());
+                           }
+                        }
+                     }
+
+                     rolling.brake(brake);
+                     passive.put(root, rolling);
+                  }
+               }
             }
+
+            SuspensionContactSolver.Result result = SuspensionContactSolver.solve(contacts);
+
+            for (Entry<SableTrackBlockEntity, SuspensionContactSolver.FreeBelt> rollingEntry : passive.entrySet()) {
+               SableTrackBlockEntity root = rollingEntry.getKey();
+               SuspensionContactSolver.FreeBelt rolling = rollingEntry.getValue();
+               if (Double.isFinite(rolling.speed)) {
+                  root.passiveMotion = true;
+                  root.passiveSpeed = rolling.speed;
+                  root.passiveDistance = root.passiveDistance + rolling.speed * timeStep;
+                  root.passivePhysicsTick = root.passiveSampleTick = level.getGameTime();
+                  if (level.getGameTime() - root.passiveReportTick >= 100L) {
+                     root.passiveReportTick = level.getGameTime();
+                     List<SableTrackBlockEntity> members = TrackAssemblies.members(root);
+                     int grounded = 0;
+                     double normal = 0.0;
+                     double tangent = 0.0;
+
+                     for (SableTrackBlockEntity memberxx : members) {
+                        if (memberxx.pendingContact != null) {
+                           grounded++;
+                           normal += memberxx.pendingContact.supportImpulse();
+                           tangent += Math.abs(memberxx.pendingContact.forward().impulse);
+                        }
+                     }
+
+                     TrackDiagnostics.motion(
+                        root.beltId,
+                        System.identityHashCode(host),
+                        members.size(),
+                        grounded,
+                        rolling.speed,
+                        root.passiveDistance,
+                        normal,
+                        tangent,
+                        1.0 / rolling.inverseMass
+                     );
+                  }
+               }
+            }
+
+            ForceTotal total = new ForceTotal();
+
+            for (SableTrackBlockEntity wheelxx : frame.wheels) {
+               SuspensionContactSolver.Contact contact = wheelxx.pendingContact;
+               if (contact != null) {
+                  wheelxx.queuedForce.zero();
+
+                  for (SuspensionContactSolver.Row row : new SuspensionContactSolver.Row[]{contact.normal(), contact.stop(), contact.forward(), contact.side()}) {
+                     if (row != null) {
+                        wheelxx.queuedForce.add(row.j[0] * row.impulse, row.j[1] * row.impulse, row.j[2] * row.impulse);
+                     }
+                  }
+
+                  wheelxx.diagnosticNormal = contact.supportImpulse();
+                  wheelxx.diagnosticStopImpulse = contact.stop() == null ? 0.0 : contact.stop().impulse;
+                  wheelxx.diagnosticForwardImpulse = contact.forward().impulse;
+                  wheelxx.diagnosticSideImpulse = contact.side().impulse;
+                  wheelxx.diagnosticLimited = wheelxx.diagnosticNormal <= 1.0E-8 || contact.normal().impulse >= contact.maxNormal() - 1.0E-8;
+                  if (wheelxx.queuedForce.isFinite()) {
+                     total.applyImpulseAtPoint(host, wheelxx.queuedForcePos, wheelxx.queuedForce);
+                  }
+               }
+            }
+
+            RigidBodyHandle.of(host).applyForcesAndReset(total);
+            TrackDiagnostics.solver(host, contacts.size(), result, System.nanoTime() - start);
+
+            for (SableTrackBlockEntity wheelxxx : frame.wheels) {
+               wheelxxx.recordPhysicsDiagnostics(host, timeStep);
+               wheelxxx.pendingContact = null;
+            }
+
+            iterator.remove();
          }
       }
-      long start=System.nanoTime();
-      var result=SuspensionContactSolver.solve(loads.stream().map(ContactLoad::contact).toList());
-      long solveNanos=System.nanoTime()-start;
-      var totals=new java.util.IdentityHashMap<ServerSubLevel,ForceTotal>();
-      for(var load:loads) {
-         var impulse=new Vector3d();
-         for(var row:rows(load.contact))if(row!=null)impulse.add(row.j[0]*row.impulse,row.j[1]*row.impulse,row.j[2]*row.impulse);
-         if(!impulse.isFinite())continue;
-         totals.computeIfAbsent(load.host,h->new ForceTotal()).applyImpulseAtPoint(load.host,JOMLConversion.toJOML(load.point),impulse);
-         if(load.other instanceof ServerSubLevel other&&load.contact.normal().reaction()!=null) {
-            var reaction=new Vector3d(impulse);load.host.logicalPose().transformNormal(reaction);other.logicalPose().transformNormalInverse(reaction).negate();
-            totals.computeIfAbsent(other,h->new ForceTotal()).applyImpulseAtPoint(other,JOMLConversion.toJOML(load.otherPoint),reaction);
-         }
-         var w=load.source;w.queuedForce.add(impulse);w.diagnosticNormal+=load.contact.supportImpulse();
-         w.diagnosticForwardImpulse+=load.contact.forward().impulse;w.diagnosticSideImpulse+=load.contact.side().impulse;
-         if(load.contact.supportImpulse()>1e-8)w.diagnosticContact=true;
-         if(!load.surface) {
-            w.diagnosticStopImpulse=load.contact.stop()==null?0:load.contact.stop().impulse;
-            w.diagnosticLimited=w.diagnosticNormal<=1e-8||load.contact.normal().impulse>=load.contact.maxNormal()-1e-8;
-         }
-      }
-      for(var e:totals.entrySet())RigidBodyHandle.of(e.getKey()).applyForcesAndReset(e.getValue());
-      for(var e:passive.entrySet()) {
-         var root=e.getKey();var rolling=e.getValue();if(!Double.isFinite(rolling.speed))continue;
-         root.passiveMotion=true;root.passiveSpeed=rolling.speed;root.passiveDistance+=rolling.speed*timeStep;
-         root.passivePhysicsTick=root.passiveSampleTick=level.getGameTime();
-         if(level.getGameTime()-root.passiveReportTick>=100) {
-            root.passiveReportTick=level.getGameTime();int count=0;double normal=0,tangent=0;
-            for(var load:loads)if(load.root==root){count++;normal+=load.contact.supportImpulse();tangent+=Math.abs(load.contact.forward().impulse);}
-            dev.trackssimulate.diagnostics.TrackDiagnostics.motion(root.beltId,System.identityHashCode(Sable.HELPER.getContaining(root)),TrackAssemblies.members(root).size(),count,rolling.speed,root.passiveDistance,normal,tangent,1/rolling.inverseMass);
-         }
-      }
-      boolean timed=false;
-      for(var e:active) {
-         var host=e.getKey();var batch=batches.get(host);int count=0;double normal=0,tangent=0;
-         for(var load:loads)if(load.host==host){count++;if(load.surface){normal+=load.contact.supportImpulse();tangent+=Math.abs(load.contact.forward().impulse)+Math.abs(load.contact.side().impulse);}}
-         // Global island time is charged once, not multiplied by the number of vehicles.
-         dev.trackssimulate.diagnostics.TrackDiagnostics.solver(host,count,result,timed?0:solveNanos);timed=true;
-         dev.trackssimulate.diagnostics.TrackDiagnostics.surface(host,batch,normal,tangent);
-         for(var w:e.getValue().wheels){w.recordPhysicsDiagnostics(host,timeStep);w.pendingContact=null;w.pendingOther=null;}
-      }
-      SUPPORT_COUNTS.keySet().removeIf(host->host.isRemoved()||host.getLevel()==level);
-   }
-   private static Vec3 oppositePoint(ServerSubLevel host,Vec3 point,SubLevel other) {
-      var world=host.logicalPose().transformPosition(point);return other==null?world:other.logicalPose().transformPositionInverse(world);
-   }
-   private static SuspensionContactSolver.Row[] rows(SuspensionContactSolver.Contact c) {
-      return new SuspensionContactSolver.Row[]{c.normal(),c.stop(),c.forward(),c.side()};
+
+      SUPPORT_COUNTS.keySet().removeIf(hostx -> hostx.isRemoved() || hostx.getLevel() == level);
    }
 
    public static void clearPhysicsQueue() {
-      SUSPENSION_FRAMES.clear();SUPPORT_COUNTS.clear();
-      dev.trackssimulate.physics.SurfaceContacts.clear();
-      dev.trackssimulate.physics.ConnectedBodies.clear();
+      SUSPENSION_FRAMES.clear();
+      SUPPORT_COUNTS.clear();
    }
 
    public float calculateStressApplied() {
@@ -452,142 +647,183 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
       this.strength.value = 16;
    }
 
-   private double diagnosticNormal, diagnosticRpm, diagnosticForward, diagnosticSide;
-   private double diagnosticRawExtension, diagnosticCompression, diagnosticSpring, diagnosticDamping;
-   private double diagnosticStopImpulse,diagnosticStopPenetration,diagnosticForwardImpulse,diagnosticSideImpulse;
-   private BlockPos diagnosticHit;
-   private int diagnosticQueries;
-   private boolean diagnosticLimited, diagnosticContact;
-
    public void sable$physicsTick(ServerSubLevel subLevel, RigidBodyHandle handle, double timeStep) {
-      if (isRemoved() || subLevel.isRemoved() || !(timeStep > 0) || timeStep > .1 || !effectivePart().appliesPhysics()) return;
-      long start = System.nanoTime();
-      queuedForce.zero(); diagnosticNormal=0; diagnosticRpm=0; diagnosticForward=0; diagnosticSide=0;
-      diagnosticRawExtension=Double.NaN; diagnosticCompression=0; diagnosticSpring=0; diagnosticDamping=0;
-      diagnosticStopImpulse=diagnosticStopPenetration=diagnosticForwardImpulse=diagnosticSideImpulse=0;
-      diagnosticHit=null; diagnosticLimited=false; diagnosticContact=false; diagnosticQueries=0;
-      pendingContact=null;pendingOther=null;
-      var frame=SUSPENSION_FRAMES.computeIfAbsent(subLevel,SuspensionFrame::new);
-      if(!frame.valid())return;
-      applyTrackPhysics(subLevel,handle,timeStep);
-      diagnosticNanos=System.nanoTime()-start;
-      frame.wheels.add(this);
+      if (!this.isRemoved() && !subLevel.isRemoved() && timeStep > 0.0 && !(timeStep > 0.1) && this.effectivePart().appliesPhysics()) {
+         long start = System.nanoTime();
+         this.queuedForce.zero();
+         this.diagnosticNormal = 0.0;
+         this.diagnosticRpm = 0.0;
+         this.diagnosticForward = 0.0;
+         this.diagnosticSide = 0.0;
+         this.diagnosticRawExtension = Double.NaN;
+         this.diagnosticCompression = 0.0;
+         this.diagnosticSpring = 0.0;
+         this.diagnosticDamping = 0.0;
+         this.diagnosticStopImpulse = this.diagnosticStopPenetration = this.diagnosticForwardImpulse = this.diagnosticSideImpulse = 0.0;
+         this.diagnosticHit = null;
+         this.diagnosticLimited = false;
+         this.diagnosticContact = false;
+         this.diagnosticQueries = 0;
+         this.pendingContact = null;
+         SableTrackBlockEntity.SuspensionFrame frame = SUSPENSION_FRAMES.computeIfAbsent(subLevel, SableTrackBlockEntity.SuspensionFrame::new);
+         this.applyTrackPhysics(subLevel, handle, timeStep);
+         this.diagnosticNanos = System.nanoTime() - start;
+         frame.wheels.add(this);
+      }
    }
 
-   private void recordPhysicsDiagnostics(ServerSubLevel subLevel,double timeStep) {
-      dev.trackssimulate.diagnostics.TrackDiagnostics.sample(subLevel,getBlockPos(),effectiveRole().name(),
-         wheelRadius(),wheelWidth(),timeStep,extension,maximumExtension(),queuedForce,diagnosticNormal,diagnosticRpm,
-         diagnosticForward,diagnosticSide,diagnosticHit,diagnosticContact,diagnosticRawExtension,diagnosticCompression,
-         diagnosticSpring,diagnosticDamping,diagnosticLimited,diagnosticQueries,diagnosticNanos,
-         maximumCompression(),contactSpread,contactMargin,forwardFriction,sideFriction,diagnosticStopImpulse,diagnosticStopPenetration,
-         diagnosticForwardImpulse,diagnosticSideImpulse,-heightOffset);
+   private void recordPhysicsDiagnostics(ServerSubLevel subLevel, double timeStep) {
+      TrackDiagnostics.sample(
+         subLevel,
+         this.getBlockPos(),
+         this.effectiveRole() == SableTrackRole.DRIVE,
+         this.wheelRadius(),
+         this.wheelWidth(),
+         timeStep,
+         this.extension,
+         this.maximumExtension(),
+         this.queuedForce,
+         this.diagnosticNormal,
+         this.diagnosticRpm,
+         this.diagnosticForward,
+         this.diagnosticSide,
+         this.diagnosticHit,
+         this.diagnosticContact,
+         this.diagnosticRawExtension,
+         this.diagnosticCompression,
+         this.diagnosticSpring,
+         this.diagnosticDamping,
+         this.diagnosticLimited,
+         this.diagnosticQueries,
+         this.diagnosticNanos,
+         this.maximumCompression(),
+         this.contactSpread,
+         this.contactMargin,
+         this.forwardFriction,
+         this.sideFriction,
+         this.diagnosticStopImpulse,
+         this.diagnosticStopPenetration,
+         this.diagnosticForwardImpulse,
+         this.diagnosticSideImpulse,
+         -this.heightOffset
+      );
    }
 
    private static int supportCount(ServerSubLevel host) {
       return SUPPORT_COUNTS.computeIfAbsent(host, body -> {
-         int count=0;
-         for (var actor : body.getPlot().getBlockEntityActors()) {
-            if (actor instanceof SableTrackBlockEntity wheel && !wheel.isRemoved()
-               && wheel.effectiveRole()==SableTrackRole.SUSPENSION) count++;
+         int count = 0;
+
+         for (BlockEntitySubLevelActor actor : body.getPlot().getBlockEntityActors()) {
+            if (actor instanceof SableTrackBlockEntity) {
+               SableTrackBlockEntity wheel = (SableTrackBlockEntity)actor;
+               if (!wheel.isRemoved() && wheel.effectiveRole() == SableTrackRole.SUSPENSION) {
+                  count++;
+               }
+            }
          }
-         return Math.max(1,count);
+
+         return Math.max(1, count);
       });
    }
 
    private void applyTrackPhysics(ServerSubLevel subLevel, RigidBodyHandle handle, double timeStep) {
       SableTrackPart part = this.effectivePart();
-      Direction facing = this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
-      diagnosticRpm = this.getSharedTrackSpeed(facing);
-      // Fixed wheels have no spring travel. Their shell contacts are collected
-      // with the complete belt after all suspension positions have been evaluated.
-      if (part.role()!=SableTrackRole.SUSPENSION) {
-         this.extension=0; this.liftedUp=true;
-         return;
+      Direction facing = (Direction)this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
+      this.diagnosticRpm = (double)this.getSharedTrackSpeed(facing);
+      if (part.role() != SableTrackRole.SUSPENSION) {
+         this.extension = 0.0;
+         this.liftedUp = true;
+      } else {
+         Vec3 localPos = this.getTrackCenter(facing);
+         this.queuedForcePos.set(localPos.x, localPos.y, localPos.z);
+         MassData massData = subLevel.getMassTracker();
+         double normalMass = 1.0 / massData.getInverseNormalMass(this.queuedForcePos, OrientedBoundingBox3d.UP);
+         double supportedMass = massData.getMass() / (double)supportCount(subLevel);
+         if (normalMass > 0.0 && Double.isFinite(normalMass) && supportedMass > 0.0) {
+            Pose3d pose = subLevel.logicalPose();
+            Vec3i side = Direction.get(AxisDirection.POSITIVE, facing.getAxis()).getNormal();
+            Vector3dc sideD = this.getRotatedAxis(side);
+            Vector3dc forwardD = this.getRotatedAxis(new Vec3i(side.getZ(), 0, side.getX()));
+            SableTrackBlockEntity.TerrainCastResult terrain = this.computeExtensionToTerrain(forwardD, pose, part);
+            double rawExtension = terrain.maxExtension() - this.wheelRadius();
+            this.diagnosticRawExtension = rawExtension;
+            this.diagnosticHit = terrain.minInteractingBlock();
+            SuspensionLimits limits = this.suspensionLimits();
+            this.extension = limits.clamp(rawExtension);
+            this.liftedUp = terrain.minInteractingBlock() == null || !limits.reachable(rawExtension);
+            if (!this.liftedUp) {
+               this.diagnosticContact = true;
+               double effectiveStrength = this.strength == null ? 16.0 : (double)this.strength.getValue();
+               double springStrength = effectiveStrength * 8.0 * this.springMultiplier;
+               double dampingStrength = 1.6 * Math.sqrt(springStrength * supportedMass) * this.dampingMultiplier;
+               double springError = this.maximumExtension() - this.extension;
+               Vector3d velocity = Sable.HELPER.getVelocity(this.level, JOMLConversion.toJOML(localPos));
+               if (terrain.subLevel() != null) {
+                  Vec3 hitLocal = terrain.subLevel().logicalPose().transformPositionInverse(terrain.worldHit());
+                  velocity.sub(Sable.HELPER.getVelocity(this.level, JOMLConversion.toJOML(hitLocal)));
+               }
+
+               Vector3d localVelocity = pose.transformNormalInverse(velocity);
+               Vector3d normal = new Vector3d((double)terrain.normal().getStepX(), (double)terrain.normal().getStepY(), (double)terrain.normal().getStepZ());
+               if (terrain.subLevel() != null) {
+                  terrain.subLevel().logicalPose().transformNormal(normal);
+               }
+
+               pose.transformNormalInverse(normal);
+               normal.normalize();
+               double normalVelocity = localVelocity.dot(normal);
+               double dampingForce = -normalVelocity * dampingStrength;
+               double bumpStart = limits.bumpStart(this.bumpClearanceMultiplier);
+               double bumpError = Math.max(0.0, bumpStart - rawExtension);
+               double bumpStiffness = springStrength * 4.0 * this.bumpForceMultiplier;
+               double springForce = springError * springStrength + bumpError * bumpStiffness;
+               double stiffness = springStrength + (bumpError > 0.0 ? bumpStiffness : 0.0);
+               this.diagnosticStopPenetration = limits.penetration(rawExtension);
+               double implicitDamping = dampingStrength + stiffness * timeStep;
+               double softness = 1.0 / (timeStep * implicitDamping);
+               double maxImpulse = supportedMass * 80.0 * timeStep * this.maxImpulseMultiplier;
+               this.diagnosticCompression = springError;
+               this.diagnosticSpring = springForce;
+               this.diagnosticDamping = dampingForce;
+               this.touchingFriction = fudgeFriction(PhysicsBlockPropertyHelper.getFriction(this.level.getBlockState(terrain.minInteractingBlock())));
+               double brakeStrength = (double)this.level.getSignal(this.getBlockPos().above(), Direction.DOWN) / 15.0;
+               double surfaceBraking = Math.min(this.touchingFriction, 1.0);
+               double strengthMul = Math.min(normalMass, effectiveStrength) * 16.0;
+               Vector3d forward = new Vector3d(forwardD).fma(-forwardD.dot(normal), normal).normalize();
+               Vector3d lateral = new Vector3d(normal).cross(forward);
+               if (lateral.dot(sideD) < 0.0) {
+                  lateral.negate();
+               }
+
+               this.diagnosticForward = localVelocity.dot(forward);
+               this.diagnosticSide = localVelocity.dot(lateral);
+               double forwardDamping = Math.max(1.0E-6, (0.075 + brakeStrength * 0.3) * surfaceBraking * part.sideGripMultiplier() * strengthMul);
+               double sideDamping = Math.max(
+                  1.0E-6, 0.6 * this.touchingFriction * strengthMul * part.sideGripMultiplier() * this.gripMultiplier * this.sideFriction
+               );
+               double motorForce = this.diagnosticRpm * (1.0 - brakeStrength) * surfaceBraking * -0.45 * part.driveMultiplier() * this.driveMultiplier;
+               SableTrackBlockEntity.SuspensionFrame frame = SUSPENSION_FRAMES.get(subLevel);
+               Vector3d lever = new Vector3d(this.queuedForcePos).sub(frame.centerOfMass);
+               this.pendingContact = new SuspensionContactSolver.Contact(
+                  contactRow(frame, lever, normal, normalVelocity, springForce / implicitDamping, softness),
+                  contactRow(frame, lever, normal, normalVelocity, limits.stopTarget(rawExtension, normal.y, timeStep), 0.0),
+                  contactRow(frame, lever, forward, this.diagnosticForward, motorForce / forwardDamping, (1.0 - brakeStrength) / (timeStep * forwardDamping)),
+                  contactRow(frame, lever, lateral, this.diagnosticSide, 0.0, 1.0 / (timeStep * sideDamping)),
+                  maxImpulse,
+                  this.touchingFriction * this.gripMultiplier * this.forwardFriction,
+                  this.touchingFriction * this.gripMultiplier * this.sideFriction
+               );
+            }
+         }
       }
-      Vec3i side = Direction.get(AxisDirection.POSITIVE, facing.getAxis()).getNormal();
-      Vector3dc forwardD = this.getRotatedAxis(new Vec3i(side.getZ(),0,side.getX()));
-      TerrainCastResult terrain = this.computeExtensionToTerrain(forwardD, subLevel.logicalPose(), part);
-      applySuspensionTerrain(subLevel,timeStep,SUSPENSION_FRAMES.get(subLevel),terrain);
    }
 
-   private void applySuspensionTerrain(ServerSubLevel subLevel,double timeStep,SuspensionFrame frame,TerrainCastResult terrain) {
-      SableTrackPart part=this.effectivePart();
-      Direction facing=this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
-      Vec3 localPos=terrain.forcePoint()!=null?terrain.forcePoint():this.getTrackCenter(facing);
-      this.queuedForcePos.set(localPos.x,localPos.y,localPos.z);
-      pendingContact=null;pendingOther=null;diagnosticContact=false;
-      MassData massData = subLevel.getMassTracker();
-      double normalMass = 1.0 / massData.getInverseNormalMass(this.queuedForcePos, OrientedBoundingBox3d.UP);
-      double supportedMass = massData.getMass()/supportCount(subLevel);
-      if (!(normalMass>0) || !Double.isFinite(normalMass) || !(supportedMass>0)) return;
-      Pose3d pose = subLevel.logicalPose();
-      Vec3i side = Direction.get(AxisDirection.POSITIVE, facing.getAxis()).getNormal();
-      Vector3dc sideD = this.getRotatedAxis(side);
-      Vector3dc forwardD = this.getRotatedAxis(new Vec3i(side.getZ(),0,side.getX()));
-      double rawExtension=terrain.maxExtension()-wheelRadius();
-      diagnosticRawExtension=rawExtension; diagnosticHit=terrain.minInteractingBlock();
-      var limits=suspensionLimits();
-      this.extension=limits.clamp(rawExtension);
-      this.liftedUp=terrain.minInteractingBlock()==null || !limits.reachable(rawExtension);
-      if (this.liftedUp) return;
-      diagnosticContact=true;pendingOther=terrain.subLevel();
-
-      // Use exactly the same extension for geometry and spring compression.
-      // Stiffness is per wheel, not the full vehicle effective mass multiplied
-      // once again for every wheel. Added load can now visibly compress a spring.
-      double effectiveStrength=this.strength==null?16:this.strength.getValue();
-      double springStrength=effectiveStrength*8.0*this.springMultiplier;
-      double dampingStrength=1.6*Math.sqrt(springStrength*supportedMass)*this.dampingMultiplier;
-      double springError=maximumExtension()-this.extension;
-      Vector3d velocity = Sable.HELPER.getVelocity(this.level,JOMLConversion.toJOML(localPos));
-      if (terrain.subLevel()!=null) {
-         Vec3 hitLocal=terrain.subLevel().logicalPose().transformPositionInverse(pose.transformPosition(localPos));
-         velocity.sub(Sable.HELPER.getVelocity(this.level,JOMLConversion.toJOML(hitLocal)));
-      }
-      Vector3d localVelocity=pose.transformNormalInverse(velocity);
-      Vector3d normal=JOMLConversion.toJOML(terrain.normal());
-      normal.normalize();
-      // Velocity projection and impulse direction must form the same Jacobian.
-      // Every wheel then observes velocity changes caused by every other wheel.
-      double normalVelocity=localVelocity.dot(normal);
-      double dampingForce=-normalVelocity*dampingStrength;
-      double bumpStart=limits.bumpStart(this.bumpClearanceMultiplier);
-      double bumpError=Math.max(0,bumpStart-rawExtension);
-      double bumpStiffness=springStrength*4*this.bumpForceMultiplier;
-      double springForce=springError*springStrength+bumpError*bumpStiffness;
-      double stiffness=springStrength+(bumpError>0?bumpStiffness:0);
-      diagnosticStopPenetration=limits.penetration(rawExtension);
-      double implicitDamping=dampingStrength+stiffness*timeStep;
-      double softness=1/(timeStep*implicitDamping);
-      double maxImpulse=supportedMass*80*timeStep*this.maxImpulseMultiplier;
-      diagnosticCompression=springError; diagnosticSpring=springForce; diagnosticDamping=dampingForce;
-      this.touchingFriction=fudgeFriction(PhysicsBlockPropertyHelper.getFriction(this.level.getBlockState(terrain.minInteractingBlock())));
-      double brakeStrength=(double)this.level.getSignal(this.getBlockPos().above(),Direction.DOWN)/15;
-      double surfaceBraking=Math.min(this.touchingFriction,1);
-      double strengthMul=Math.min(normalMass,effectiveStrength)*16;
-      Vector3d forward=new Vector3d(forwardD).fma(-forwardD.dot(normal),normal).normalize();
-      Vector3d lateral=new Vector3d(normal).cross(forward);
-      if(lateral.dot(sideD)<0)lateral.negate();
-      diagnosticForward=localVelocity.dot(forward); diagnosticSide=localVelocity.dot(lateral);
-      // Friction raises the traction/braking envelope, not the straight-line
-      // viscous drag or desired speed. Full braking solves no-slip directly.
-      double forwardDamping=Math.max(1e-6,(0.075+brakeStrength*0.3)*surfaceBraking*part.sideGripMultiplier()*strengthMul);
-      double sideDamping=Math.max(1e-6,0.6*this.touchingFriction*strengthMul*part.sideGripMultiplier()*this.gripMultiplier*this.sideFriction);
-      forwardDamping*=this.driveMultiplier;
-      double rimTarget=-diagnosticRpm*Math.PI*2/60*wheelRadius()*(1-brakeStrength);
-      Vector3d lever=new Vector3d(queuedForcePos).sub(frame.centerOfMass);
-      pendingContact=new SuspensionContactSolver.Contact(
-         contactRow(frame,lever,normal,normalVelocity,springForce/implicitDamping,softness),
-         contactRow(frame,lever,normal,normalVelocity,limits.stopTarget(rawExtension,normal.y,timeStep),0),
-         contactRow(frame,lever,forward,diagnosticForward,rimTarget,(1-brakeStrength)/(timeStep*forwardDamping)),
-         contactRow(frame,lever,lateral,diagnosticSide,0,1/(timeStep*sideDamping)),
-         maxImpulse,this.touchingFriction*this.gripMultiplier*this.forwardFriction,this.touchingFriction*this.gripMultiplier*this.sideFriction);
-   }
-
-   private static SuspensionContactSolver.Row contactRow(SuspensionFrame frame, Vector3dc lever, Vector3dc direction,
-         double velocity,double target,double softness) {
-      return new SuspensionContactSolver.Row(direction.x(),direction.y(),direction.z(),lever.x(),lever.y(),lever.z(),
-         frame.inverseMass,frame.inverseInertia,velocity,target,softness).bind(frame.body);
+   private static SuspensionContactSolver.Row contactRow(
+      SableTrackBlockEntity.SuspensionFrame frame, Vector3dc lever, Vector3dc direction, double velocity, double target, double softness
+   ) {
+      return new SuspensionContactSolver.Row(
+         direction.x(), direction.y(), direction.z(), lever.x(), lever.y(), lever.z(), frame.inverseMass, frame.inverseInertia, velocity, target, softness
+      );
    }
 
    public static double fudgeFriction(double realValue) {
@@ -595,132 +831,192 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    }
 
    public void tick() {
-      if(level!=null&&!level.isClientSide&&travelMigrationPending) {
-         travelMigrationPending=false;setChanged();sendData();
-         dev.trackssimulate.Tracks.LOGGER.info("[TS-TRAVEL] event=saved_semantics_migrated pos={} downOffset={} extension={} compressionStroke={} relativeLimits=[{},{}]",worldPosition,-heightOffset,maximumExtension(),maxCompression,minimumExtension(),maximumExtension());
-      }
-      dev.trackssimulate.assembly.TrackDriveNetwork.maintain(this);
-      super.tick();
-      if(isRemoved())return; // Create may break a conflicting kinetic connection during attach.
-      if(beltIndex==0&&beltId!=null) {
-         if(level.isClientSide) {
-            passiveLastRender=passiveRender;
-            if(passiveMotion) {
-               double age=Math.max(0,Math.min(4,level.getGameTime()-passiveSampleTick));
-               double expected=passiveDistance+passiveSpeed*age/20;
-               passiveRender+=(expected-passiveRender)*.65;
-            }
-         } else {
-            if(passiveMotion&&level.getGameTime()-passivePhysicsTick>2){passiveSpeed=0;passiveSampleTick=level.getGameTime();}
-            if(level.getGameTime()%2==0&&(passiveMotion!=lastSentPassive||!Double.isFinite(lastSentPassiveDistance)
-                ||Math.abs(passiveSpeed-lastSentPassiveSpeed)>.01||Math.abs(passiveDistance-lastSentPassiveDistance)>.002||passiveMotion&&level.getGameTime()%20==0)) {
-               lastSentPassive=passiveMotion;lastSentPassiveDistance=passiveDistance;lastSentPassiveSpeed=passiveSpeed;
-               PacketDistributor.sendToPlayersInDimension((ServerLevel)level,new dev.trackssimulate.assembly.AssemblyPackets.Motion(worldPosition,beltId,passiveSampleTick,passiveDistance,passiveSpeed,passiveMotion));
-               if(level.getGameTime()%20==0)setChanged();
-            }
-         }
-      }
-      if(removalRecipient!=null&&removalTick!=level.getGameTime())removalRecipient=null;
-      if (beltId!=null && level.getGameTime()%20==0) {
-         if(!level.isClientSide)TrackAssemblies.reconcile(this);
-         else invalidateRenderBoundingBox();
-      }
-      this.lastLateralOffset = this.lateralOffset;
-      this.lastLongitudinalOffset = this.longitudinalOffset;
-      this.lastHeightOffset = this.heightOffset;
-      if (!this.level.isClientSide) {
-         this.syncSuspensionModelState();
+      if (this.level != null && !this.level.isClientSide && this.travelMigrationPending) {
+         this.travelMigrationPending = false;
+         this.setChanged();
+         this.sendData();
+         Tracks.LOGGER
+            .info(
+               "[TS-TRAVEL] event=saved_semantics_migrated pos={} downOffset={} extension={} compressionStroke={} relativeLimits=[{},{}]",
+               new Object[]{
+                  this.worldPosition, -this.heightOffset, this.maximumExtension(), this.maxCompression, this.minimumExtension(), this.maximumExtension()
+               }
+            );
       }
 
-      this.propagateTrackStrengthIfChanged();
-      SableTrackPart part = this.effectivePart();
-      if (part.isWheel()) {
-         if (part.role()!=SableTrackRole.SUSPENSION) {
-            this.extension=this.lastExtension=this.targetExtension=0;
-         } else if (this.level.isClientSide) {
-            this.lastExtension=this.extension;
-            this.extension=Mth.lerp(0.7,this.extension,this.targetExtension);
-         } else if (Sable.HELPER.getContaining(this)==null) {
-            this.extension=maximumExtension(); this.liftedUp=true;
-         }
-         if (!this.level.isClientSide && ++this.suspensionSyncTicks>=2) {
-            this.suspensionSyncTicks=0;
-            if (!Double.isFinite(this.lastSentExtension) || Math.abs(this.extension-this.lastSentExtension)>0.002
-               || this.liftedUp!=this.lastSentLifted) {
-               this.lastSentExtension=this.extension; this.lastSentLifted=this.liftedUp;
-               this.sendData();
-            }
-         }
-         Direction facing = (Direction)this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
-         float speed = this.getSharedTrackSpeed(facing);
-         double rpt = (double)(-speed) * Math.PI * 2.0 / 60.0 / 20.0 * (double)(15 - this.level.getSignal(this.getBlockPos().above(), Direction.DOWN)) / 15.0;
-         double attemptedAngularVelocity = Mth.lerp(0.2, this.angularVelocity, rpt);
-         if (this.level.isClientSide) {
-            SubLevel subLevel = Sable.HELPER.getContaining(this);
-            if (subLevel != null && !this.liftedUp) {
-               Vector3d velocity = Sable.HELPER.getVelocity(this.level, JOMLConversion.toJOML(this.getTrackCenter(facing)));
-               Vector3d localVelocity = subLevel.logicalPose().transformNormalInverse(velocity).div(20.0);
-               Axis axis = facing.getAxis();
-               Vec3i forward = Direction.get(AxisDirection.POSITIVE, axis).getNormal();
-               forward = new Vec3i(forward.getZ(), 0, forward.getX());
-               Vector3dc forwardD = this.getRotatedAxis(forward);
-               double translation = localVelocity.dot(forwardD);
-               double circumference = Math.PI * wheelRadius() * 2.0;
-               double angularDelta = translation / circumference * Math.PI * 2.0;
-               if (this.touchingFriction < 1.0) {
-                  angularDelta = Mth.lerp(this.touchingFriction, attemptedAngularVelocity, angularDelta);
+      TrackDriveNetwork.maintain(this);
+      super.tick();
+      if (!this.isRemoved()) {
+         if (this.beltIndex == 0 && this.beltId != null) {
+            if (this.level.isClientSide) {
+               this.passiveLastRender = this.passiveRender;
+               if (this.passiveMotion) {
+                  double age = (double)Math.max(0L, Math.min(4L, this.level.getGameTime() - this.passiveSampleTick));
+                  double expected = this.passiveDistance + this.passiveSpeed * age / 20.0;
+                  this.passiveRender = this.passiveRender + (expected - this.passiveRender) * 0.65;
+               }
+            } else {
+               if (this.passiveMotion && this.level.getGameTime() - this.passivePhysicsTick > 2L) {
+                  this.passiveSpeed = 0.0;
+                  this.passiveSampleTick = this.level.getGameTime();
                }
 
-               this.lastAngle = this.angle;
-               this.angle += angularDelta;
-               this.angularVelocity = angularDelta;
+               if (this.level.getGameTime() % 2L == 0L
+                  && (
+                     this.passiveMotion != this.lastSentPassive
+                        || !Double.isFinite(this.lastSentPassiveDistance)
+                        || Math.abs(this.passiveSpeed - this.lastSentPassiveSpeed) > 0.01
+                        || Math.abs(this.passiveDistance - this.lastSentPassiveDistance) > 0.002
+                        || this.passiveMotion && this.level.getGameTime() % 20L == 0L
+                  )) {
+                  this.lastSentPassive = this.passiveMotion;
+                  this.lastSentPassiveDistance = this.passiveDistance;
+                  this.lastSentPassiveSpeed = this.passiveSpeed;
+                  PacketDistributor.sendToPlayersInDimension(
+                     (ServerLevel)this.level,
+                     new AssemblyPackets.Motion(
+                        this.worldPosition, this.beltId, this.passiveSampleTick, this.passiveDistance, this.passiveSpeed, this.passiveMotion
+                     ),
+                     new CustomPacketPayload[0]
+                  );
+                  if (this.level.getGameTime() % 20L == 0L) {
+                     this.setChanged();
+                  }
+               }
+            }
+         }
+
+         if (this.removalRecipient != null && this.removalTick != this.level.getGameTime()) {
+            this.removalRecipient = null;
+         }
+
+         if (this.beltId != null && this.level.getGameTime() % 20L == 0L) {
+            if (!this.level.isClientSide) {
+               TrackAssemblies.reconcile(this);
             } else {
-               this.angularVelocity = attemptedAngularVelocity;
-               this.lastAngle = this.angle;
-               this.angle = this.angle + this.angularVelocity;
+               this.invalidateRenderBoundingBox();
+            }
+         }
+
+         this.lastLateralOffset = this.lateralOffset;
+         this.lastLongitudinalOffset = this.longitudinalOffset;
+         this.lastHeightOffset = this.heightOffset;
+         if (!this.level.isClientSide) {
+            this.syncSuspensionModelState();
+         }
+
+         this.propagateTrackStrengthIfChanged();
+         SableTrackPart part = this.effectivePart();
+         if (part.isWheel()) {
+            if (part.role() != SableTrackRole.SUSPENSION) {
+               this.extension = this.lastExtension = this.targetExtension = 0.0;
+            } else if (this.level.isClientSide) {
+               this.lastExtension = this.extension;
+               this.extension = Mth.lerp(0.7, this.extension, this.targetExtension);
+            } else if (Sable.HELPER.getContaining(this) == null) {
+               this.extension = this.maximumExtension();
+               this.liftedUp = true;
+            }
+
+            if (!this.level.isClientSide && ++this.suspensionSyncTicks >= 2) {
+               this.suspensionSyncTicks = 0;
+               if (!Double.isFinite(this.lastSentExtension)
+                  || Math.abs(this.extension - this.lastSentExtension) > 0.002
+                  || this.liftedUp != this.lastSentLifted) {
+                  this.lastSentExtension = this.extension;
+                  this.lastSentLifted = this.liftedUp;
+                  this.sendData();
+               }
+            }
+
+            Direction facing = (Direction)this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
+            float speed = this.getSharedTrackSpeed(facing);
+            double rpt = (double)(-speed)
+               * Math.PI
+               * 2.0
+               / 60.0
+               / 20.0
+               * (double)(15 - this.level.getSignal(this.getBlockPos().above(), Direction.DOWN))
+               / 15.0;
+            double attemptedAngularVelocity = Mth.lerp(0.2, this.angularVelocity, rpt);
+            if (this.level.isClientSide) {
+               SubLevel subLevel = Sable.HELPER.getContaining(this);
+               if (subLevel != null && !this.liftedUp) {
+                  Vector3d velocity = Sable.HELPER.getVelocity(this.level, JOMLConversion.toJOML(this.getTrackCenter(facing)));
+                  Vector3d localVelocity = subLevel.logicalPose().transformNormalInverse(velocity).div(20.0);
+                  Axis axis = facing.getAxis();
+                  Vec3i forward = Direction.get(AxisDirection.POSITIVE, axis).getNormal();
+                  forward = new Vec3i(forward.getZ(), 0, forward.getX());
+                  Vector3dc forwardD = this.getRotatedAxis(forward);
+                  double translation = localVelocity.dot(forwardD);
+                  double circumference = Math.PI * this.wheelRadius() * 2.0;
+                  double angularDelta = translation / circumference * Math.PI * 2.0;
+                  if (this.touchingFriction < 1.0) {
+                     angularDelta = Mth.lerp(this.touchingFriction, attemptedAngularVelocity, angularDelta);
+                  }
+
+                  this.lastAngle = this.angle;
+                  this.angle += angularDelta;
+                  this.angularVelocity = angularDelta;
+               } else {
+                  this.angularVelocity = attemptedAngularVelocity;
+                  this.lastAngle = this.angle;
+                  this.angle = this.angle + this.angularVelocity;
+               }
             }
          }
       }
    }
 
-   private TerrainCastResult computeExtensionToTerrain(Vector3dc forwardD, Pose3dc pose, SableTrackPart part) {
-      Direction facing=this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
-      Vec3 center=this.getTrackCenter(facing);
-      double bestDistance=wheelRadius()+maximumExtension()+contactMargin+1;
-      Vec3 bestNormal=new Vec3(0,1,0);
-      SubLevel bestSubLevel=null;
-      BlockPos bestBlock=null;
-      // Fixed five-ray budget; width changes reach, never multiplies support forces.
-      // Offset rays use the circular underside rather than a flat plank envelope.
-      double spacing=wheelRadius()*0.4*contactSpread;
-      for(int i=0;i<5;i++) {
-         double offset=i<3?(i-1)*spacing:0;
-         double axial=i<3?0:(i==3?-1:1)*wheelWidth()*.4*contactSpread;
-         Vec3 sample=center.add(JOMLConversion.toMojang(forwardD).scale(offset))
-            .add(Vec3.atLowerCornerOf(facing.getNormal()).scale(axial));
-         double top=Math.max(0,-minimumExtension())+contactMargin;
-         ClipContext clip=new ClipContext(sample.add(0,top,0),sample.subtract(0,wheelRadius()+maximumExtension()+contactMargin,0),
-            Block.COLLIDER,Fluid.NONE,CollisionContext.empty());
+   private SableTrackBlockEntity.TerrainCastResult computeExtensionToTerrain(Vector3dc forwardD, Pose3dc pose, SableTrackPart part) {
+      Direction facing = (Direction)this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
+      Vec3 center = this.getTrackCenter(facing);
+      double bestDistance = this.wheelRadius() + this.maximumExtension() + this.contactMargin + 1.0;
+      Direction bestNormal = Direction.UP;
+      SubLevel bestSubLevel = null;
+      BlockPos bestBlock = null;
+      Vec3 bestWorldHit = Vec3.ZERO;
+      double spacing = this.wheelRadius() * 0.4 * this.contactSpread;
+
+      for (int i = 0; i < 5; i++) {
+         double offset = i < 3 ? (double)(i - 1) * spacing : 0.0;
+         double axial = i < 3 ? 0.0 : (double)(i == 3 ? -1 : 1) * this.wheelWidth() * 0.4 * this.contactSpread;
+         Vec3 sample = center.add(JOMLConversion.toMojang(forwardD).scale(offset)).add(Vec3.atLowerCornerOf(facing.getNormal()).scale(axial));
+         double top = Math.max(0.0, -this.minimumExtension()) + this.contactMargin;
+         ClipContext clip = new ClipContext(
+            sample.add(0.0, top, 0.0),
+            sample.subtract(0.0, this.wheelRadius() + this.maximumExtension() + this.contactMargin, 0.0),
+            net.minecraft.world.level.ClipContext.Block.COLLIDER,
+            Fluid.NONE,
+            CollisionContext.empty()
+         );
          ((ClipContextExtension)clip).sable$setIgnoredSubLevel(Sable.HELPER.getContaining(this));
-         if(Sable.HELPER.getContaining(this) instanceof ServerSubLevel host)
-            ((ClipContextExtension)clip).sable$setSubLevelIgnoring(dev.trackssimulate.physics.ConnectedBodies.ignoring(host,connectedContacts));
-         diagnosticQueries++;
-         BlockHitResult hit=this.level.clip(clip);
-         if(hit.getType()==Type.MISS||hit.isInside())continue;
-         SubLevel hitBody=Sable.HELPER.getContaining(this.level,hit.getLocation());
-         Vec3 worldHit=hitBody==null?hit.getLocation():hitBody.logicalPose().transformPosition(hit.getLocation());
-         Vec3 localHit=pose.transformPositionInverse(worldHit);
-         Vector3d normal=new Vector3d(hit.getDirection().getStepX(),hit.getDirection().getStepY(),hit.getDirection().getStepZ());
-         if(hitBody!=null)hitBody.logicalPose().transformNormal(normal);
-         pose.transformNormalInverse(normal);
-         if(normal.y<0.5 || localHit.y>center.y+top)continue;
-         double distance=center.y-localHit.y+wheelRadius()-Math.sqrt(wheelRadius()*wheelRadius()-offset*offset);
-         if(distance<bestDistance) {
-            bestDistance=distance;bestNormal=JOMLConversion.toMojang(normal);bestSubLevel=hitBody;
-            bestBlock=hit.getBlockPos().immutable();
+         this.diagnosticQueries++;
+         BlockHitResult hit = this.level.clip(clip);
+         if (hit.getType() != Type.MISS) {
+            SubLevel hitBody = Sable.HELPER.getContaining(this.level, hit.getLocation());
+            Vec3 worldHit = hitBody == null ? hit.getLocation() : hitBody.logicalPose().transformPosition(hit.getLocation());
+            Vec3 localHit = pose.transformPositionInverse(worldHit);
+            Vector3d normal = new Vector3d((double)hit.getDirection().getStepX(), (double)hit.getDirection().getStepY(), (double)hit.getDirection().getStepZ());
+            if (hitBody != null) {
+               hitBody.logicalPose().transformNormal(normal);
+            }
+
+            pose.transformNormalInverse(normal);
+            if (!(normal.y < 0.5) && !(localHit.y > center.y + top)) {
+               double distance = center.y - localHit.y + this.wheelRadius() - Math.sqrt(this.wheelRadius() * this.wheelRadius() - offset * offset);
+               if (distance < bestDistance) {
+                  bestDistance = distance;
+                  bestNormal = hit.getDirection();
+                  bestSubLevel = hitBody;
+                  bestBlock = hit.getBlockPos().immutable();
+                  bestWorldHit = worldHit;
+               }
+            }
          }
       }
-      return new TerrainCastResult(bestDistance,bestNormal,bestSubLevel,bestBlock,null);
+
+      return new SableTrackBlockEntity.TerrainCastResult(bestDistance, bestNormal, bestSubLevel, bestBlock, bestWorldHit);
    }
 
    @NotNull
@@ -729,36 +1025,35 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    }
 
    private Vec3 getTrackCenter(Direction facing) {
-      return this.getWheelMountCenter(1);
+      return this.getWheelMountCenter(1.0F);
    }
 
-   /** Explicit placement offset is independent of suspension travel. */
    public Vec3 getWheelMountCenter(float partialTicks) {
-      Direction facing = this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
+      Direction facing = (Direction)this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
       return this.getAnchorCenter()
          .add(Vec3.atLowerCornerOf(facing.getClockWise().getNormal()).scale(this.getLerpedLateralOffset(partialTicks)))
          .add(Vec3.atLowerCornerOf(facing.getNormal()).scale(this.getLerpedLongitudinalOffset(partialTicks)))
          .add(0.0, this.getLerpedHeightOffset(partialTicks), 0.0);
    }
 
-   public Vec3 offsetDelta(double lateral,double longitudinal,double height) {
-      var facing=getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
-      return Vec3.atLowerCornerOf(facing.getClockWise().getNormal()).scale(lateral-lateralOffset)
-         .add(Vec3.atLowerCornerOf(facing.getNormal()).scale(longitudinal-longitudinalOffset))
-         .add(0,height-heightOffset,0);
+   public Vec3 offsetDelta(double lateral, double longitudinal, double height) {
+      Direction facing = (Direction)this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING);
+      return Vec3.atLowerCornerOf(facing.getClockWise().getNormal())
+         .scale(lateral - this.lateralOffset)
+         .add(Vec3.atLowerCornerOf(facing.getNormal()).scale(longitudinal - this.longitudinalOffset))
+         .add(0.0, height - this.heightOffset, 0.0);
    }
 
    public Vec3 getWheelCenter(float partialTicks) {
-      return this.getWheelMountCenter(partialTicks).add(0, -this.getLerpedExtension(partialTicks), 0);
+      return this.getWheelMountCenter(partialTicks).add(0.0, -this.getLerpedExtension(partialTicks), 0.0);
    }
 
-   /** Shared origin for rendering, terrain sampling and force application. */
    public Vec3 getAnchorCenter() {
       if (this.getBlockState().getBlock() instanceof SableTrackBlock block && block.isDirectWheel()) {
          return this.getBlockPos().getCenter();
       }
-      // Existing rebuild.1 mounts keep their original wheel position.
-      return this.getBlockPos().relative(this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING)).getCenter();
+
+      return this.getBlockPos().relative((Direction)this.getBlockState().getValue(SableTrackBlock.HORIZONTAL_FACING)).getCenter();
    }
 
    public SableTrackRole baseRole() {
@@ -769,6 +1064,7 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
       if (this.getBlockState().getBlock() instanceof SableTrackBlock block && block.isDirectWheel()) {
          return block.builtInPart();
       }
+
       return SableTrackPart.fromStack(this.heldItem);
    }
 
@@ -776,15 +1072,24 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
       return this.effectivePart().role();
    }
 
-   public double adjustLateralOffset(int direction) {return adjustOffset("lateral",direction);}
-   public double adjustLongitudinalOffset(int direction) {return adjustOffset("longitudinal",direction);}
-   public double adjustHeightOffset(int direction) {return adjustOffset("height",direction);}
-   private double adjustOffset(String key,int direction) {
-      var setting=TrackSetting.byKey(key);
-      double limit=key.equals("height")?.75:1;
-      double value=Mth.clamp(Math.round((getSettingValue(key)+direction*.125)/.125)*.125,-limit,limit);
-      setSettingValue(setting.key,value,OffsetScope.ROLE);
-      return getSettingValue(key);
+   public double adjustLateralOffset(int direction) {
+      return this.adjustOffset("lateral", direction);
+   }
+
+   public double adjustLongitudinalOffset(int direction) {
+      return this.adjustOffset("longitudinal", direction);
+   }
+
+   public double adjustHeightOffset(int direction) {
+      return this.adjustOffset("height", direction);
+   }
+
+   private double adjustOffset(String key, int direction) {
+      TrackSetting setting = TrackSetting.byKey(key);
+      double limit = key.equals("height") ? 0.75 : 1.0;
+      double value = Mth.clamp((double)Math.round((this.getSettingValue(key) + (double)direction * 0.125) / 0.125) * 0.125, -limit, limit);
+      this.setSettingValue(setting.key, value, OffsetScope.ROLE);
+      return this.getSettingValue(key);
    }
 
    public double adjustTuning(String key, int direction) {
@@ -858,19 +1163,18 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
 
    public double getSettingValue(String key) {
       return switch (key) {
-         case "scale" -> wheelRadius()/effectivePart().radius();
-         case "hidden" -> visualSuspensionHidden?1:0;
-         case "wheel_hidden" -> wheelHidden?1:0;
-         case "connected_contacts" -> connectedContacts?1:0;
-         case "speed" -> speedMultiplier;
-         case "max_extension" -> effectiveRole()==SableTrackRole.SUSPENSION?maximumExtension():TrackSetting.MAX_EXTENSION.defaultValue;
-         case "max_compression" -> effectiveRole()==SableTrackRole.SUSPENSION?maximumCompression():TrackSetting.MAX_COMPRESSION.defaultValue;
-         case "contact_spread" -> contactSpread;
-         case "contact_margin" -> contactMargin;
-         case "friction_forward" -> forwardFriction;
-         case "friction_side" -> sideFriction;
-         case "through_axle" -> SableTrackBlock.axleMode(getBlockState()).id;
-         case "width" -> wheelWidth();
+         case "scale" -> this.wheelRadius() / this.effectivePart().radius();
+         case "hidden" -> this.visualSuspensionHidden ? 1.0 : 0.0;
+         case "wheel_hidden" -> this.wheelHidden ? 1.0 : 0.0;
+         case "speed" -> this.speedMultiplier;
+         case "max_extension" -> this.effectiveRole() == SableTrackRole.SUSPENSION ? this.maximumExtension() : TrackSetting.MAX_EXTENSION.defaultValue;
+         case "max_compression" -> this.effectiveRole() == SableTrackRole.SUSPENSION ? this.maximumCompression() : TrackSetting.MAX_COMPRESSION.defaultValue;
+         case "contact_spread" -> this.contactSpread;
+         case "contact_margin" -> this.contactMargin;
+         case "friction_forward" -> this.forwardFriction;
+         case "friction_side" -> this.sideFriction;
+         case "through_axle" -> (double)SableTrackBlock.axleMode(this.getBlockState()).id;
+         case "width" -> this.wheelWidth();
          case "lateral" -> this.lateralOffset;
          case "longitudinal" -> this.longitudinalOffset;
          case "height" -> this.heightOffset;
@@ -878,30 +1182,52 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
       };
    }
 
-   /** Physical tuning is shared; position writes use an explicit target scope. */
    public boolean setSettingValue(String key, double value) {
-      return setSettingValue(key,value,OffsetScope.ROLE);
+      return this.setSettingValue(key, value, OffsetScope.ROLE);
    }
-   public boolean setSettingValue(String key,double value,OffsetScope scope) {
-      var setting = dev.trackssimulate.config.TrackSetting.byKey(key);
-      if (setting == null || !setting.accepts(value) || this.level == null || this.level.isClientSide) return false;
-      switch (key) {
-         case "connected_contacts", "scale", "width", "hidden", "wheel_hidden", "speed", "through_axle", "max_extension", "max_compression", "contact_spread", "contact_margin", "friction_forward", "friction_side" -> throw new IllegalArgumentException("请通过调试 GUI 应用此配置");
-         case "strength" -> {
-            if (this.strength == null) return false;
-            this.strength.value = (int)value;
-            this.applyStrengthToConnectedTrack((int)value);
+
+   public boolean setSettingValue(String key, double value, OffsetScope scope) {
+      TrackSetting setting = TrackSetting.byKey(key);
+      if (setting != null && setting.accepts(value) && this.level != null && !this.level.isClientSide) {
+         switch (key) {
+            case "scale":
+            case "width":
+            case "hidden":
+            case "wheel_hidden":
+            case "speed":
+            case "through_axle":
+            case "max_extension":
+            case "max_compression":
+            case "contact_spread":
+            case "contact_margin":
+            case "friction_forward":
+            case "friction_side":
+               throw new IllegalArgumentException("请通过调试 GUI 应用此配置");
+            case "strength":
+               if (this.strength == null) {
+                  return false;
+               }
+
+               this.strength.value = (int)value;
+               this.applyStrengthToConnectedTrack((int)value);
+               break;
+            case "lateral":
+            case "longitudinal":
+            case "height":
+               this.applyOffsetToConnectedTrack(key, value, scope);
+               break;
+            default:
+               this.applyTuningToConnectedTrack(key, value);
          }
-         case "lateral", "longitudinal", "height" -> {
-            this.applyOffsetToConnectedTrack(key, value,scope);
-         }
-         default -> this.applyTuningToConnectedTrack(key, value);
+
+         return true;
+      } else {
+         return false;
       }
-      return true;
    }
 
    private void onTuningChanged() {
-      settingsConfigured=true;
+      this.settingsConfigured = true;
       this.setChanged();
       if (this.level != null && !this.level.isClientSide) {
          this.sendData();
@@ -926,7 +1252,7 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    }
 
    public double getLerpedExtension(float partialTicks) {
-      return effectiveRole()!=SableTrackRole.SUSPENSION?0:Mth.lerp((double)partialTicks, this.lastExtension, this.extension);
+      return this.effectiveRole() != SableTrackRole.SUSPENSION ? 0.0 : Mth.lerp((double)partialTicks, this.lastExtension, this.extension);
    }
 
    public double getLerpedLateralOffset(float partialTicks) {
@@ -945,8 +1271,8 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
       return (float)Mth.lerp((double)partialTicks, this.lastAngle, this.angle);
    }
 
-   public float getSharedTrackAngle(Direction facing,float partialTicks) {
-      return beltId==null?getLerpedAngle(partialTicks):TrackAssemblies.angle(this,partialTicks);
+   public float getSharedTrackAngle(Direction facing, float partialTicks) {
+      return this.beltId == null ? this.getLerpedAngle(partialTicks) : TrackAssemblies.angle(this, partialTicks);
    }
 
    public ItemStack getHeldItem() {
@@ -968,8 +1294,13 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    }
 
    public float getSharedTrackSpeed(Direction facing) {
-      if(beltId!=null)return TrackAssemblies.rpm(this);
-      return effectiveRole()==SableTrackRole.DRIVE?(float)((facing.getAxis()==Axis.X?-getSpeed():getSpeed())*speedMultiplier):0;
+      if (this.beltId != null) {
+         return TrackAssemblies.rpm(this);
+      } else {
+         return this.effectiveRole() == SableTrackRole.DRIVE
+            ? (float)((double)(facing.getAxis() == Axis.X ? -this.getSpeed() : this.getSpeed()) * this.speedMultiplier)
+            : 0.0F;
+      }
    }
 
    public boolean isVisualSuspensionHidden() {
@@ -981,12 +1312,25 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    }
 
    public boolean applyBeltColorToConnectedTrack(DyeColor color) {
-      if(level==null||level.isClientSide)return false;
-      boolean changed=false;for(var member:TrackAssemblies.members(this))changed|=member.setBeltColor(color);return changed;
+      if (this.level != null && !this.level.isClientSide) {
+         boolean changed = false;
+
+         for (SableTrackBlockEntity member : TrackAssemblies.members(this)) {
+            changed |= member.setBeltColor(color);
+         }
+
+         return changed;
+      } else {
+         return false;
+      }
    }
 
    public void resetTuningToConnectedTrack() {
-      if(level!=null&&!level.isClientSide)for(var member:TrackAssemblies.members(this))member.resetTuning();
+      if (this.level != null && !this.level.isClientSide) {
+         for (SableTrackBlockEntity member : TrackAssemblies.members(this)) {
+            member.resetTuning();
+         }
+      }
    }
 
    public void toggleVisualSuspensionHidden() {
@@ -1007,7 +1351,7 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    }
 
    private void resetTuning() {
-      settingsConfigured=true;
+      this.settingsConfigured = true;
       if (this.strength != null) {
          this.strength.value = 16;
       }
@@ -1090,34 +1434,66 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    }
 
    private void applyStrengthToConnectedTrack(int value) {
-      if(level==null||level.isClientSide)return;
-      for(var member:TrackAssemblies.members(this)) {
-         if(member.strength!=null)member.strength.value=value;
-         member.settingsConfigured=true;member.lastPropagatedStrength=value;member.protectedStrengthValue=value;member.setChanged();member.sendData();
+      if (this.level != null && !this.level.isClientSide) {
+         for (SableTrackBlockEntity member : TrackAssemblies.members(this)) {
+            if (member.strength != null) {
+               member.strength.value = value;
+            }
+
+            member.settingsConfigured = true;
+            member.lastPropagatedStrength = value;
+            member.protectedStrengthValue = value;
+            member.setChanged();
+            member.sendData();
+         }
       }
    }
 
-   private void applyTuningToConnectedTrack(String key,double value) {
-      if(level!=null&&!level.isClientSide)for(var member:TrackAssemblies.members(this))member.setTuning(key,value);
+   private void applyTuningToConnectedTrack(String key, double value) {
+      if (this.level != null && !this.level.isClientSide) {
+         for (SableTrackBlockEntity member : TrackAssemblies.members(this)) {
+            member.setTuning(key, value);
+         }
+      }
    }
 
-   private void applyOffsetToConnectedTrack(String key,double value) {
-      applyOffsetToConnectedTrack(key,value,OffsetScope.ROLE);
+   private void applyOffsetToConnectedTrack(String key, double value) {
+      this.applyOffsetToConnectedTrack(key, value, OffsetScope.ROLE);
    }
-   private void applyOffsetToConnectedTrack(String key,double value,OffsetScope scope) {
-      if(level==null||level.isClientSide)return;
-      var deltas=new java.util.LinkedHashMap<SableTrackBlockEntity,Vec3>();
-      for(var member:TrackAssemblies.members(this))if(scope.includes(member==this,member.effectiveRole()==effectiveRole()))
-         deltas.put(member,member.offsetDelta(key.equals("lateral")?value:member.lateralOffset,
-            key.equals("longitudinal")?value:member.longitudinalOffset,key.equals("height")?value:member.heightOffset));
-      var edit=TrackAssemblies.prepareOffsets(this,deltas);
-      for(var member:deltas.keySet())member.validateTravelSettings(java.util.Map.of(TrackSetting.byKey(key),value));
-      for(var member:deltas.keySet())member.setOffset(key,value);
-      edit.commit("offset_"+key+"_"+scope);
+
+   private void applyOffsetToConnectedTrack(String key, double value, OffsetScope scope) {
+      if (this.level != null && !this.level.isClientSide) {
+         LinkedHashMap<SableTrackBlockEntity, Vec3> deltas = new LinkedHashMap<>();
+
+         for (SableTrackBlockEntity member : TrackAssemblies.members(this)) {
+            if (scope.includes(member == this, member.effectiveRole() == this.effectiveRole())) {
+               deltas.put(
+                  member,
+                  member.offsetDelta(
+                     key.equals("lateral") ? value : member.lateralOffset,
+                     key.equals("longitudinal") ? value : member.longitudinalOffset,
+                     key.equals("height") ? value : member.heightOffset
+                  )
+               );
+            }
+         }
+
+         TrackAssemblies.GeometryEdit edit = TrackAssemblies.prepareOffsets(this, deltas);
+
+         for (SableTrackBlockEntity memberx : deltas.keySet()) {
+            memberx.validateTravelSettings(Map.of(TrackSetting.byKey(key), value));
+         }
+
+         for (SableTrackBlockEntity memberx : deltas.keySet()) {
+            memberx.setOffset(key, value);
+         }
+
+         edit.commit("offset_" + key + "_" + scope);
+      }
    }
 
    private void setOffset(String key, double value) {
-      settingsConfigured=true;
+      this.settingsConfigured = true;
       switch (key) {
          case "lateral":
             this.lateralOffset = value;
@@ -1178,26 +1554,44 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    }
 
    protected void write(CompoundTag tag, Provider registries, boolean clientPacket) {
-      if(beltId!=null&&beltIndex==0) {
-         tag.putDouble("PassiveDistance",passiveDistance);
-         if(clientPacket){tag.putBoolean("PassiveMotion",passiveMotion);tag.putDouble("PassiveSpeed",passiveSpeed);tag.putLong("PassiveSampleTick",passiveSampleTick);}
+      if (this.beltId != null && this.beltIndex == 0) {
+         tag.putDouble("PassiveDistance", this.passiveDistance);
+         if (clientPacket) {
+            tag.putBoolean("PassiveMotion", this.passiveMotion);
+            tag.putDouble("PassiveSpeed", this.passiveSpeed);
+            tag.putLong("PassiveSampleTick", this.passiveSampleTick);
+         }
       }
-      if(Double.isFinite(radiusOverride))tag.putDouble("WheelRadius",radiusOverride);
-      tag.putDouble("WheelWidth",wheelWidth);
-      tag.put("WheelMaterial",net.minecraft.nbt.NbtUtils.writeBlockState(material));
-      tag.put("WheelMaterialItem",materialItem.saveOptional(registries));
-      tag.putBoolean("ConnectedContacts",connectedContacts);
-      tag.putBoolean("WheelHidden",wheelHidden);tag.putDouble("BeltSpeedMultiplier",speedMultiplier);
-      tag.putInt("SuspensionSemantics",2);
-      if(Double.isFinite(maxExtensionOverride))tag.putDouble("MaximumExtension",maxExtensionOverride);
-      tag.putDouble("MaximumCompression",maxCompression);tag.putDouble("ContactSpread",contactSpread);tag.putDouble("ContactMargin",contactMargin);
-      tag.putDouble("ForwardFriction",forwardFriction);tag.putDouble("SideFriction",sideFriction);
-      tag.putBoolean("IndependentOffsets",true);
-      tag.putBoolean("SettingsConfigured",settingsConfigured);
-      if(beltId!=null){tag.putUUID("AssemblyId",beltId);tag.putInt("AssemblyNode",beltIndex);}
-      tag.putDouble("Extension", effectiveRole()!=SableTrackRole.SUSPENSION?0:this.extension);
-      tag.putBoolean("SuspensionLifted",this.liftedUp);
-      tag.putDouble("TouchingFriction",this.touchingFriction);
+
+      if (Double.isFinite(this.radiusOverride)) {
+         tag.putDouble("WheelRadius", this.radiusOverride);
+      }
+
+      tag.putDouble("WheelWidth", this.wheelWidth);
+      tag.put("WheelMaterial", NbtUtils.writeBlockState(this.material));
+      tag.put("WheelMaterialItem", this.materialItem.saveOptional(registries));
+      tag.putBoolean("WheelHidden", this.wheelHidden);
+      tag.putDouble("BeltSpeedMultiplier", this.speedMultiplier);
+      tag.putInt("SuspensionSemantics", 2);
+      if (Double.isFinite(this.maxExtensionOverride)) {
+         tag.putDouble("MaximumExtension", this.maxExtensionOverride);
+      }
+
+      tag.putDouble("MaximumCompression", this.maxCompression);
+      tag.putDouble("ContactSpread", this.contactSpread);
+      tag.putDouble("ContactMargin", this.contactMargin);
+      tag.putDouble("ForwardFriction", this.forwardFriction);
+      tag.putDouble("SideFriction", this.sideFriction);
+      tag.putBoolean("IndependentOffsets", true);
+      tag.putBoolean("SettingsConfigured", this.settingsConfigured);
+      if (this.beltId != null) {
+         tag.putUUID("AssemblyId", this.beltId);
+         tag.putInt("AssemblyNode", this.beltIndex);
+      }
+
+      tag.putDouble("Extension", this.effectiveRole() != SableTrackRole.SUSPENSION ? 0.0 : this.extension);
+      tag.putBoolean("SuspensionLifted", this.liftedUp);
+      tag.putDouble("TouchingFriction", this.touchingFriction);
       tag.putDouble("LateralOffset", this.lateralOffset);
       tag.putDouble("LongitudinalOffset", this.longitudinalOffset);
       tag.putDouble("HeightOffset", this.heightOffset);
@@ -1218,45 +1612,78 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
    }
 
    protected void read(CompoundTag tag, Provider registries, boolean clientPacket) {
-      boolean wasPassive=passiveMotion&&tag.hasUUID("AssemblyId")&&tag.getUUID("AssemblyId").equals(beltId);
-      passiveDistance=Double.isFinite(tag.getDouble("PassiveDistance"))?tag.getDouble("PassiveDistance"):0;
-      passiveMotion=clientPacket&&tag.getBoolean("PassiveMotion");
-      passiveSpeed=clientPacket&&Double.isFinite(tag.getDouble("PassiveSpeed"))?tag.getDouble("PassiveSpeed"):0;
-      passiveSampleTick=tag.getLong("PassiveSampleTick");
-      if(!clientPacket||!wasPassive)passiveLastRender=passiveRender=passiveDistance;
-      radiusOverride=(Double.isFinite(tag.getDouble("WheelRadius"))&&tag.getDouble("WheelRadius")>0&&tag.getDouble("WheelRadius")<=TrackSetting.SCALE.max)?tag.getDouble("WheelRadius"):Double.NaN;
-      wheelWidth=TrackSetting.WIDTH.accepts(tag.getDouble("WheelWidth"))?tag.getDouble("WheelWidth"):1;
-      material=tag.contains("WheelMaterial")?net.minecraft.nbt.NbtUtils.readBlockState(registries.lookupOrThrow(net.minecraft.core.registries.Registries.BLOCK),tag.getCompound("WheelMaterial")):com.simibubi.create.AllBlocks.COPYCAT_BASE.getDefaultState();
-      if(material.isAir())material=com.simibubi.create.AllBlocks.COPYCAT_BASE.getDefaultState();
-      materialItem=ItemStack.parseOptional(registries,tag.getCompound("WheelMaterialItem"));
-      if(!materialItem.isEmpty())materialItem.setCount(1);
-      connectedContacts=tag.getBoolean("ConnectedContacts");
-      wheelHidden=tag.getBoolean("WheelHidden");speedMultiplier=TrackSetting.SPEED.accepts(tag.getDouble("BeltSpeedMultiplier"))?tag.getDouble("BeltSpeedMultiplier"):1;
-      beltId=tag.hasUUID("AssemblyId")?tag.getUUID("AssemblyId"):null;
-      beltIndex=tag.getInt("AssemblyNode");invalidateRenderBoundingBox();
-      this.heldItem = ItemStack.parseOptional(registries, tag.getCompound("HeldTrackItem"));
-      maxExtensionOverride=tag.contains("MaximumExtension")&&TrackSetting.MAX_EXTENSION.accepts(tag.getDouble("MaximumExtension"))?tag.getDouble("MaximumExtension"):Double.NaN;
-      maxCompression=readSetting(tag,"MaximumCompression",TrackSetting.MAX_COMPRESSION);
-      heightOffset=readSetting(tag,"HeightOffset",TrackSetting.HEIGHT);
-      if(effectiveRole()==SableTrackRole.SUSPENSION) {
-         double oldExtension=maximumExtension(),oldCompression=maxCompression;
-         var restored=dev.trackssimulate.physics.SuspensionLimits.restore(oldExtension,maxCompression,-heightOffset,tag.getInt("SuspensionSemantics")<2);
-         if(restored.extension()!=oldExtension)maxExtensionOverride=restored.extension();
-         maxCompression=restored.compression();
-         if(!clientPacket&&(tag.getInt("SuspensionSemantics")<2||restored.extension()!=oldExtension||maxCompression!=oldCompression))travelMigrationPending=true;
+      boolean wasPassive = this.passiveMotion && tag.hasUUID("AssemblyId") && tag.getUUID("AssemblyId").equals(this.beltId);
+      this.passiveDistance = Double.isFinite(tag.getDouble("PassiveDistance")) ? tag.getDouble("PassiveDistance") : 0.0;
+      this.passiveMotion = clientPacket && tag.getBoolean("PassiveMotion");
+      this.passiveSpeed = clientPacket && Double.isFinite(tag.getDouble("PassiveSpeed")) ? tag.getDouble("PassiveSpeed") : 0.0;
+      this.passiveSampleTick = tag.getLong("PassiveSampleTick");
+      if (!clientPacket || !wasPassive) {
+         this.passiveLastRender = this.passiveRender = this.passiveDistance;
       }
-      contactSpread=readSetting(tag,"ContactSpread",TrackSetting.CONTACT_SPREAD);contactMargin=readSetting(tag,"ContactMargin",TrackSetting.CONTACT_MARGIN);
-      forwardFriction=readSetting(tag,"ForwardFriction",TrackSetting.FRICTION_FORWARD);sideFriction=readSetting(tag,"SideFriction",TrackSetting.FRICTION_SIDE);
-      if (tag.contains("Extension")) {
-         double received=tag.getDouble("Extension");
-         if (Double.isFinite(received)) {
-            this.targetExtension=Mth.clamp(received,minimumExtension(),maximumExtension());
-            if(!clientPacket)this.lastExtension=this.extension=this.targetExtension;
+
+      this.radiusOverride = Double.isFinite(tag.getDouble("WheelRadius"))
+            && tag.getDouble("WheelRadius") > 0.0
+            && tag.getDouble("WheelRadius") <= TrackSetting.SCALE.max
+         ? tag.getDouble("WheelRadius")
+         : Double.NaN;
+      this.wheelWidth = TrackSetting.WIDTH.accepts(tag.getDouble("WheelWidth")) ? tag.getDouble("WheelWidth") : 1.0;
+      this.material = tag.contains("WheelMaterial")
+         ? NbtUtils.readBlockState(registries.lookupOrThrow(Registries.BLOCK), tag.getCompound("WheelMaterial"))
+         : AllBlocks.COPYCAT_BASE.getDefaultState();
+      if (this.material.isAir()) {
+         this.material = AllBlocks.COPYCAT_BASE.getDefaultState();
+      }
+
+      this.materialItem = ItemStack.parseOptional(registries, tag.getCompound("WheelMaterialItem"));
+      if (!this.materialItem.isEmpty()) {
+         this.materialItem.setCount(1);
+      }
+
+      this.wheelHidden = tag.getBoolean("WheelHidden");
+      this.speedMultiplier = TrackSetting.SPEED.accepts(tag.getDouble("BeltSpeedMultiplier")) ? tag.getDouble("BeltSpeedMultiplier") : 1.0;
+      this.beltId = tag.hasUUID("AssemblyId") ? tag.getUUID("AssemblyId") : null;
+      this.beltIndex = tag.getInt("AssemblyNode");
+      this.invalidateRenderBoundingBox();
+      this.heldItem = ItemStack.parseOptional(registries, tag.getCompound("HeldTrackItem"));
+      this.maxExtensionOverride = tag.contains("MaximumExtension") && TrackSetting.MAX_EXTENSION.accepts(tag.getDouble("MaximumExtension"))
+         ? tag.getDouble("MaximumExtension")
+         : Double.NaN;
+      this.maxCompression = readSetting(tag, "MaximumCompression", TrackSetting.MAX_COMPRESSION);
+      this.heightOffset = readSetting(tag, "HeightOffset", TrackSetting.HEIGHT);
+      if (this.effectiveRole() == SableTrackRole.SUSPENSION) {
+         double oldExtension = this.maximumExtension();
+         double oldCompression = this.maxCompression;
+         SuspensionLimits restored = SuspensionLimits.restore(oldExtension, this.maxCompression, -this.heightOffset, tag.getInt("SuspensionSemantics") < 2);
+         if (restored.extension() != oldExtension) {
+            this.maxExtensionOverride = restored.extension();
+         }
+
+         this.maxCompression = restored.compression();
+         if (!clientPacket && (tag.getInt("SuspensionSemantics") < 2 || restored.extension() != oldExtension || this.maxCompression != oldCompression)) {
+            this.travelMigrationPending = true;
          }
       }
-      extension=Mth.clamp(extension,minimumExtension(),maximumExtension());lastExtension=Mth.clamp(lastExtension,minimumExtension(),maximumExtension());
-      this.liftedUp=tag.getBoolean("SuspensionLifted");
-      if(tag.contains("TouchingFriction"))this.touchingFriction=tag.getDouble("TouchingFriction");
+
+      this.contactSpread = readSetting(tag, "ContactSpread", TrackSetting.CONTACT_SPREAD);
+      this.contactMargin = readSetting(tag, "ContactMargin", TrackSetting.CONTACT_MARGIN);
+      this.forwardFriction = readSetting(tag, "ForwardFriction", TrackSetting.FRICTION_FORWARD);
+      this.sideFriction = readSetting(tag, "SideFriction", TrackSetting.FRICTION_SIDE);
+      if (tag.contains("Extension")) {
+         double received = tag.getDouble("Extension");
+         if (Double.isFinite(received)) {
+            this.targetExtension = Mth.clamp(received, this.minimumExtension(), this.maximumExtension());
+            if (!clientPacket) {
+               this.lastExtension = this.extension = this.targetExtension;
+            }
+         }
+      }
+
+      this.extension = Mth.clamp(this.extension, this.minimumExtension(), this.maximumExtension());
+      this.lastExtension = Mth.clamp(this.lastExtension, this.minimumExtension(), this.maximumExtension());
+      this.liftedUp = tag.getBoolean("SuspensionLifted");
+      if (tag.contains("TouchingFriction")) {
+         this.touchingFriction = tag.getDouble("TouchingFriction");
+      }
 
       if (tag.contains("LateralOffset")) {
          this.lateralOffset = tag.getDouble("LateralOffset");
@@ -1265,8 +1692,6 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
       if (tag.contains("LongitudinalOffset")) {
          this.longitudinalOffset = tag.getDouble("LongitudinalOffset");
       }
-
-      // Height was validated above, before deriving the travel interval.
 
       if (tag.contains("SpringMultiplier")) {
          this.springMultiplier = tag.getDouble("SpringMultiplier");
@@ -1312,38 +1737,70 @@ public class SableTrackBlockEntity extends KineticBlockEntity implements BlockEn
          this.lastHeightOffset = this.heightOffset;
       }
 
-      // Old versions broadcast road offsets into drives, but never displayed
-      // them. Do not suddenly move old drives when enabling explicit offsets.
-      if(!tag.getBoolean("IndependentOffsets")&&effectiveRole()==SableTrackRole.DRIVE) {
-         lateralOffset=lastLateralOffset=longitudinalOffset=lastLongitudinalOffset=heightOffset=lastHeightOffset=0;
+      if (!tag.getBoolean("IndependentOffsets") && this.effectiveRole() == SableTrackRole.DRIVE) {
+         this.lateralOffset = this.lastLateralOffset = this.longitudinalOffset = this.lastLongitudinalOffset = this.heightOffset = this.lastHeightOffset = 0.0;
       }
+
       super.read(tag, registries, clientPacket);
-      settingsConfigured=tag.getBoolean("SettingsConfigured");
-      if(!tag.contains("SettingsConfigured"))for(var setting:TrackSetting.values())
-         if(setting!=TrackSetting.SCALE&&setting!=TrackSetting.WIDTH&&Math.abs(getSettingValue(setting.key)-setting.defaultValue)>1e-8)settingsConfigured=true;
+      this.settingsConfigured = tag.getBoolean("SettingsConfigured");
+      if (!tag.contains("SettingsConfigured")) {
+         for (TrackSetting setting : TrackSetting.values()) {
+            if (setting != TrackSetting.SCALE && setting != TrackSetting.WIDTH && Math.abs(this.getSettingValue(setting.key) - setting.defaultValue) > 1.0E-8) {
+               this.settingsConfigured = true;
+            }
+         }
+      }
+
       if (this.strength != null) {
          this.protectedStrengthValue = this.strength.getValue();
          this.lastPropagatedStrength = this.protectedStrengthValue;
       }
    }
 
-   private static double readSetting(CompoundTag tag,String key,TrackSetting setting) {
-      return tag.contains(key)&&setting.accepts(tag.getDouble(key))?tag.getDouble(key):setting.defaultValue;
+   private static double readSetting(CompoundTag tag, String key, TrackSetting setting) {
+      return tag.contains(key) && setting.accepts(tag.getDouble(key)) ? tag.getDouble(key) : setting.defaultValue;
    }
 
    protected AABB createRenderBoundingBox() {
-      AABB box=new AABB(getBlockPos());var assembly=TrackAssemblies.get(this);
-      if(assembly==null||beltIndex!=0){
-         var mount=getWheelMountCenter(1);double reach=Math.max(wheelRadius(),wheelWidth()/2)+Math.max(maximumExtension(),maximumCompression())+.5;
-         return box.minmax(new AABB(mount,mount).inflate(reach));
+      AABB box = new AABB(this.getBlockPos());
+      TrackAssemblies.Assembly assembly = TrackAssemblies.get(this);
+      if (assembly != null && this.beltIndex == 0) {
+         if (assembly != null) {
+            BlockPos origin = assembly.origin(this);
+
+            for (BlockPos offset : assembly.offsets()) {
+               box = box.minmax(new AABB(origin.offset(offset)));
+            }
+         }
+
+         return box.inflate(10.0);
+      } else {
+         Vec3 mount = this.getWheelMountCenter(1.0F);
+         double reach = Math.max(this.wheelRadius(), this.wheelWidth() / 2.0) + Math.max(this.maximumExtension(), this.maximumCompression()) + 0.5;
+         return box.minmax(new AABB(mount, mount).inflate(reach));
       }
-      if(assembly!=null){var origin=assembly.origin(this);for(var offset:assembly.offsets())box=box.minmax(new AABB(origin.offset(offset)));}
-      // Covers every allowed radius/width, mount offset and suspension travel,
-      // including a large non-root wheel when only the root draws the belt.
-      return box.inflate(10.0);
    }
 
-   private static record TerrainCastResult(double maxExtension, @NotNull Vec3 normal, @Nullable SubLevel subLevel, @Nullable BlockPos minInteractingBlock, @Nullable Vec3 forcePoint) {
+   private static final class SuspensionFrame {
+      final List<SableTrackBlockEntity> wheels = new ArrayList<>();
+      final double inverseMass;
+      final double[] inverseInertia;
+      final Vector3d centerOfMass;
+
+      SuspensionFrame(ServerSubLevel host) {
+         MassData mass = host.getMassTracker();
+         Matrix3dc inertia = mass.getInverseInertiaTensor();
+         this.inverseMass = mass.getInverseMass();
+         this.centerOfMass = new Vector3d(mass.getCenterOfMass());
+         this.inverseInertia = new double[]{
+            inertia.m00(), inertia.m10(), inertia.m20(), inertia.m01(), inertia.m11(), inertia.m21(), inertia.m02(), inertia.m12(), inertia.m22()
+         };
+      }
+   }
+
+   private static record TerrainCastResult(
+      double maxExtension, @NotNull Direction normal, @Nullable SubLevel subLevel, @Nullable BlockPos minInteractingBlock, Vec3 worldHit
+   ) {
    }
 
    private static class TrackStrengthValueBehaviour extends ScrollValueBehaviour {

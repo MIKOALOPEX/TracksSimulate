@@ -28,9 +28,8 @@ public final class TrackSettingsChecks {
         for(var field:TrackSetting.values()) {
             boolean driveOnly=field==TrackSetting.THROUGH_AXLE||field==TrackSetting.SPEED;
             check(field.supports(true,false)==!driveOnly,"road skips drive-only settings");
-            boolean universal=Set.of(TrackSetting.LATERAL,TrackSetting.LONGITUDINAL,TrackSetting.HEIGHT,TrackSetting.SCALE,TrackSetting.WIDTH,TrackSetting.WHEEL_HIDDEN,
-                TrackSetting.CONNECTED_CONTACTS,TrackSetting.FRICTION_FORWARD,TrackSetting.FRICTION_SIDE,TrackSetting.GRIP,TrackSetting.DRIVE).contains(field);
-            check(field.supports(false,false)==universal,"fixed wheels expose surface traction but skip suspension fields");
+            boolean universal=Set.of(TrackSetting.LATERAL,TrackSetting.LONGITUDINAL,TrackSetting.HEIGHT,TrackSetting.SCALE,TrackSetting.WIDTH,TrackSetting.WHEEL_HIDDEN).contains(field);
+            check(field.supports(false,false)==universal,"fixed wheels only expose size, appearance and offsets");
             check(field.supports(false,true)==(universal||driveOnly),"drive role support");
             check(!field.accepts(Double.NaN)&&!field.accepts(Double.POSITIVE_INFINITY),"nonfinite input rejected");
             check(field.accepts(field.defaultValue),"valid defaults");

@@ -2,7 +2,7 @@
 package dev.trackssimulate.content.blocks.sable_track;
 
 public enum SableTrackRole {
-   GUIDE(0.4, 0.0, 0.0, 0.0, 0, true),
+   GUIDE(0.4, 0.0, 0.0, 0.0, 0, false),
    MOUNT(0.0, 0.0, 0.0, 0.0, 0, false),
    SUSPENSION(0.75, 0.75, 0.0, 1.05, 3, true),
    DRIVE(0.8, 0.55, 1.9, 1.25, 2, true);

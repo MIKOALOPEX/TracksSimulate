@@ -10,9 +10,9 @@
       "sha256": "ef87fe5709f1ba1f5b8bb20a2925b5afb4669e178fd6d8bf10c167759eefe37a",
       "bytes": 19123767
     },
-    "offroad-1.3.0.jar": {
-      "sha256": "f87a27bd830f14be7fa801358084d00335b64cd31785ad6294ea5970b1124061",
-      "bytes": 830335
+    "create-aeronautics-bundled-1.21.1-1.3.0.jar": {
+      "sha256": "482c90e0e6fe72f33fe7abb079e5fda581cd660ee53c38c44448a64283e1044c",
+      "bytes": 33120013
     },
     "sable-2.0.0.jar": {
       "sha256": "0eff61c2f6eda6386f63fb14bc38e930687c0f30e36d10fd360f2bec5f02f687",
@@ -21,24 +21,28 @@
     "sable-2.0.5.jar": {
       "sha256": "18265f36630b6213ab97426a3d90a5b6db4be7761ff67c894ab7cc982c194ba7",
       "bytes": 7417867
-    },
-    "simulated-1.3.0.jar": {
-      "sha256": "9cbfdaf421b450727232d7a2de5f9e2ab826ac2113a25fb1286ba431a1a8a403",
-      "bytes": 6313231
     }
   },
   "profiles": {
+    "baseline-rebuild24": [
+      "create-6.0.10.jar",
+      "sable-2.0.5.jar",
+      "create-aeronautics-bundled-1.21.1-1.3.0.jar"
+    ],
     "rebuilt-2.0.5": [
       "create-6.0.10.jar",
       "sable-2.0.5.jar",
-      "simulated-1.3.0.jar",
-      "offroad-1.3.0.jar"
+      "create-aeronautics-bundled-1.21.1-1.3.0.jar"
     ],
     "rebuilt-2.0.0": [
       "create-6.0.10.jar",
       "sable-2.0.0.jar",
-      "simulated-1.3.0.jar",
-      "offroad-1.3.0.jar"
+      "create-aeronautics-bundled-1.21.1-1.3.0.jar"
+    ],
+    "server-2.0.5": [
+      "create-6.0.10.jar",
+      "sable-2.0.5.jar",
+      "create-aeronautics-bundled-1.21.1-1.3.0.jar"
     ]
   }
 }

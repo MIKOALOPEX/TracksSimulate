@@ -129,7 +129,5 @@
   "setting.trackssimulate.friction_forward": "Longitudinal friction multiplier",
   "setting.trackssimulate.friction_forward.tooltip": "Friction along the belt. Higher values allow stronger traction and braking when friction-limited, without increasing cruise damping. Full redstone braking solves for zero contact speed within the friction budget. Zero disables longitudinal track traction, drag and braking impulses. With both friction axes zero, tracks provide no grip; other collisions or Sable damping may still slow the vehicle.",
   "setting.trackssimulate.friction_side": "Lateral friction multiplier",
-  "setting.trackssimulate.friction_side.tooltip": "Friction across the belt. Higher values resist turning and sideways slope slip. Zero completely disables lateral track friction impulses. Both axes share an elliptical budget based on terrain, grip gain and actual normal support.",
-  "setting.trackssimulate.connected_contacts": "Contact connected bodies",
-  "setting.trackssimulate.connected_contacts.tooltip": "0 disables (default), 1 enables contacts with other sublevels linked directly or transitively by Sable physics constraints. Always excludes the wheel-owning body; world terrain remains enabled. Uses the selected editor scope; choose assembly to configure the whole loop. If the bounded topology query is incomplete, other sublevel contacts are suppressed and logged."
+  "setting.trackssimulate.friction_side.tooltip": "Friction across the belt. Higher values resist turning and sideways slope slip. Zero completely disables lateral track friction impulses. Both axes share an elliptical budget based on terrain, grip gain and actual normal support."
 }

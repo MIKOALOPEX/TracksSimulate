@@ -26,8 +26,7 @@ public enum TrackSetting {
     CONTACT_SPREAD("contact_spread", .25, 1.25, .05, 1, false),
     CONTACT_MARGIN("contact_margin", 0, 1, .05, .25, false),
     FRICTION_FORWARD("friction_forward", 0, 4, .1, 1, false),
-    FRICTION_SIDE("friction_side", 0, 4, .1, 1, false),
-    CONNECTED_CONTACTS("connected_contacts",0,1,1,0,true);
+    FRICTION_SIDE("friction_side", 0, 4, .1, 1, false);
 
     public boolean resetsWithSuspension() {
         return ordinal()<LATERAL.ordinal()||ordinal()>=MAX_EXTENSION.ordinal();
@@ -48,8 +47,6 @@ public enum TrackSetting {
 
     public boolean supports(boolean roadWheel,boolean driveWheel) {
         if(this==THROUGH_AXLE||this==SPEED)return driveWheel;
-        if(this==CONNECTED_CONTACTS)return true;
-        if(this==FRICTION_FORWARD||this==FRICTION_SIDE||this==GRIP||this==DRIVE)return true;
         return roadWheel || isOffset() || this==SCALE || this==WIDTH || this==WHEEL_HIDDEN;
     }
     public static double scaledRadius(double baseRadius,double scale) {

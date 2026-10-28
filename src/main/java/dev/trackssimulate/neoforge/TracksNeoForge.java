@@ -40,7 +40,7 @@ public class TracksNeoForge {
    private static void init(FMLCommonSetupEvent event) {
       event.enqueueWork(() -> {
          var mods=net.neoforged.fml.ModList.get();
-         Tracks.LOGGER.info("[TS-ENV] build=0.6.0-rebuild.27 baseline=Tracks-1.0.1 create={} sable={} simulated={} offroad={}",
+         Tracks.LOGGER.info("[TS-ENV] build=0.6.0-rebuild.24 baseline=Tracks-1.0.1 create={} sable={} simulated={} offroad={}",
              mods.getModContainerById("create").orElseThrow().getModInfo().getVersion(),
              mods.getModContainerById("sable").orElseThrow().getModInfo().getVersion(),
              mods.getModContainerById("simulated").orElseThrow().getModInfo().getVersion(),
@@ -49,7 +49,7 @@ public class TracksNeoForge {
    }
 
    private static void registerPayloads(RegisterPayloadHandlersEvent event) {
-      PayloadRegistrar registrar = event.registrar("trackssimulate").versioned("1.15.0");
+      PayloadRegistrar registrar = event.registrar("trackssimulate").versioned("1.14.0");
       registrar.playToClient(dev.trackssimulate.network.TrackConfigFeedback.TYPE,dev.trackssimulate.network.TrackConfigFeedback.CODEC,
          (p,c)->c.enqueueWork(()->dev.trackssimulate.client.TrackSetupScreen.feedback(p)));
       dev.trackssimulate.assembly.AssemblyPackets.register(registrar);

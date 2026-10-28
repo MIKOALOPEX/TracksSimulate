@@ -102,9 +102,6 @@ tasks.named('jar') { from('LICENSE', 'THIRD_PARTY_NOTICES.md') }
 sourceSets {
     orderedChecks {
         java.srcDirs = ['src/orderedChecks/java', 'src/main/java']
-        java.include 'SurfaceContactChecks.java', 'dev/trackssimulate/physics/SurfaceProbes.java'
-        java.include 'SuspensionRoutingChecks.java', 'dev/trackssimulate/physics/SuspensionContactRouting.java'
-        java.include 'ContactValidityChecks.java', 'dev/trackssimulate/physics/ContactValidity.java', 'dev/trackssimulate/physics/ConstraintLinks.java'
         java.include 'PassiveMotionChecks.java', 'BeltSurfaceChecks.java', 'dev/trackssimulate/trackpath/BeltSurface.java', 'DiagnosticLogChecks.java', 'dev/trackssimulate/diagnostics/AsyncDiagnosticLog.java', 'OrderedBeltChecks.java', 'TrackSettingsChecks.java', 'SuspensionPhysicsChecks.java', 'dev/trackssimulate/physics/SuspensionLimits.java', 'dev/trackssimulate/physics/SuspensionContactSolver.java', 'dev/trackssimulate/trackpath/OrderedBeltPath.java', 'dev/trackssimulate/trackpath/BeltTopologyPlanner.java', 'dev/trackssimulate/config/TrackSetting.java', 'dev/trackssimulate/config/DriveAxleMode.java', 'dev/trackssimulate/config/OffsetScope.java', 'dev/trackssimulate/config/TrackSyncPolicy.java'
     }
 }
@@ -137,7 +134,7 @@ tasks.register('checkDiagnosticLog', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkDiagnosticLog') }
 
-['PassiveMotion', 'BeltSurface', 'SurfaceContact', 'ContactValidity', 'SuspensionRouting'].each { name ->
+['PassiveMotion', 'BeltSurface'].each { name ->
     tasks.register('check' + name, JavaExec) {
         dependsOn tasks.named('orderedChecksClasses')
         classpath = sourceSets.orderedChecks.runtimeClasspath
@@ -145,17 +142,3 @@ tasks.named('check') { dependsOn tasks.named('checkDiagnosticLog') }
     }
     tasks.named('check') { dependsOn tasks.named('check' + name) }
 }
-
-sourceSets {
-    engineChecks {
-        java.srcDirs = ['src/engineChecks/java']
-        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
-        runtimeClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
-    }
-}
-tasks.register('checkContactVoxels', JavaExec) {
-    dependsOn tasks.named('engineChecksClasses')
-    classpath = sourceSets.engineChecks.runtimeClasspath
-    mainClass = 'ContactVoxelChecks'
-}
-tasks.named('check') { dependsOn tasks.named('checkContactVoxels') }

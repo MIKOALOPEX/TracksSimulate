@@ -4,7 +4,6 @@
   "package": "dev.trackssimulate.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "ConstraintTopologyMixin",
     "WheelMountBlockMixin",
     "WheelMountOffsetMixin"
   ],
